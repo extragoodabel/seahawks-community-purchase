@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Seattle Seahawks Community Purchase Proposal</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="intro-header" aria-label="Proposal Header">
+        <div class="intro-header__stage">
+          <div class="layer stripe stripe-left" aria-hidden="true"></div>
+          <div class="layer stripe stripe-right" aria-hidden="true"></div>
+          <div class="layer helmet helmet-left" aria-hidden="true"></div>
+          <div class="layer helmet helmet-right" aria-hidden="true"></div>
+          <div class="layer wordmark wordmark-proposal" aria-hidden="true"></div>
+          <div class="layer wordmark wordmark-seahawks" aria-hidden="true"></div>
+          <div class="layer wordmark wordmark-community" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <header class="hero">
+        <h1>A Community Proposal to Purchase the Seattle Seahawks</h1>
+        <p>
+          As directed by the late Paul Allen, the Seattle Seahawks are to be sold, with proceeds benefiting philanthropic causes. This proposal invites the people of Seattle and supporters everywhere to consider a collective purchase model inspired by Green Bay public ownership.
+        </p>
+      </header>
+
+      <section class="callout">
+        <p>The Seahawks will be sold.</p>
+        <p>This is a proposal to buy them.</p>
+        <p>Together.</p>
+      </section>
+
+      <section class="module" aria-labelledby="stats-heading">
+        <h2 id="stats-heading">Financial Model</h2>
+        <div class="stats-grid">
+          <article>
+            <h3>Purchase Price</h3>
+            <p id="purchasePrice" class="stat-value">$12,000,000,000</p>
+          </article>
+          <article>
+            <h3>Participants</h3>
+            <p id="participantsCount" class="stat-value">0</p>
+          </article>
+          <article>
+            <h3>Equal Share Per Participant</h3>
+            <p id="equalShare" class="stat-value">Not yet calculable</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="module" aria-labelledby="join-heading">
+        <h2 id="join-heading">Join the Purchasing Collective</h2>
+        <form id="participantForm" novalidate>
+          <label>
+            Name or Initials
+            <input id="name" name="name" required maxlength="60" />
+          </label>
+
+          <label>
+            Washington County
+            <select id="county" name="county" required>
+              <option value="">Select a county</option>
+            </select>
+          </label>
+
+          <label>
+            Email (optional)
+            <input id="email" name="email" type="email" maxlength="120" />
+          </label>
+
+          <button type="submit">Record Participation</button>
+          <p id="formMessage" class="form-message" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="module" aria-labelledby="ledger-heading">
+        <h2 id="ledger-heading">Public Ledger</h2>
+        <p>Entries are listed in the order recorded.</p>
+        <ul id="ledger" class="ledger"></ul>
+      </section>
+
+      <footer class="footnote">
+        <p>This is a conceptual public-interest prototype. It is not a securities offering and creates no legal ownership.</p>
+      </footer>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

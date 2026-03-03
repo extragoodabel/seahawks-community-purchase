@@ -4,23 +4,188 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Seattle Seahawks Community Purchase Proposal</title>
+    <link rel="preload" as="image" href="/stadium/01-mountains.png" />
+    <link rel="preload" as="image" href="/stadium/02-skyline.png" />
+    <link rel="preload" as="image" href="/stadium/03-stadium-left.png" />
+    <link rel="preload" as="image" href="/stadium/04-stadium-right.png" />
+    <link rel="preload" as="image" href="/stadium/05-flag.png" />
+    <link rel="preload" as="image" href="/stadium/06-endzone-base.png" />
+    <link rel="preload" as="image" href="/stadium/07-field.png" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
-    <main class="page">
-      <section class="intro-header" aria-label="Proposal Header">
-        <div class="intro-header__stage">
-          <div class="layer stripe stripe-left" aria-hidden="true"></div>
-          <div class="layer stripe stripe-right" aria-hidden="true"></div>
-          <div class="layer helmet helmet-left" aria-hidden="true"></div>
-          <div class="layer helmet helmet-right" aria-hidden="true"></div>
-          <div class="layer wordmark wordmark-proposal" aria-hidden="true"></div>
-          <div class="layer wordmark wordmark-seahawks" aria-hidden="true"></div>
-          <div class="layer wordmark wordmark-community" aria-hidden="true"></div>
-        </div>
-      </section>
+  <body class="splash-active" data-supabase-url="" data-supabase-anon-key="">
+    <section id="stadiumStage" class="stage--entering" aria-label="Layered stadium background">
+      <div class="stadiumViewport">
+        <div class="stadiumFrameShell retroShell shell-outer-grey">
+          <div class="retroShell shell-blue">
+            <div class="retroShell shell-white">
+              <div class="retroShell shell-green">
+                <div class="retroShell shell-inner-grey">
+                  <div class="stadiumFrameMask">
+                    <div class="stadium-scene">
+                      <div class="layerWrap layerWrap--mountains" data-layer="mountains" aria-hidden="true">
+                        <div class="layerInner">
+                          <img class="layerAsset" src="/stadium/01-mountains.png" alt="" aria-hidden="true" />
+                        </div>
+                      </div>
+                      <div class="layerWrap layerWrap--skyline" data-layer="skyline" aria-hidden="true">
+                        <div class="layerInner">
+                          <img class="layerAsset" src="/stadium/02-skyline.png" alt="" aria-hidden="true" />
+                        </div>
+                      </div>
+                      <canvas id="cityShimmerCanvas" class="cityShimmerCanvas" aria-hidden="true"></canvas>
+                      <div class="layerWrap layerWrap--left" data-layer="left-arch" aria-hidden="true">
+                        <div class="layerInner">
+                          <img class="layerAsset" src="/stadium/03-stadium-left.png" alt="" aria-hidden="true" />
+                          <div class="sparkleRegion sparkleRegion--left-stands" aria-hidden="true"></div>
+                          <div class="sparkleRegion sparkleRegion--left-top" aria-hidden="true"></div>
+                        </div>
+                      </div>
+                      <div class="layerWrap layerWrap--right" data-layer="right-arch" aria-hidden="true">
+                        <div class="layerInner">
+                          <img class="layerAsset" src="/stadium/04-stadium-right.png" alt="" aria-hidden="true" />
+                          <div class="sparkleRegion sparkleRegion--right-stands" aria-hidden="true"></div>
+                          <div class="sparkleRegion sparkleRegion--right-top" aria-hidden="true"></div>
+                        </div>
+                      </div>
+                      <div class="layerWrap layerWrap--endzone" data-layer="endzone-group" aria-hidden="true">
+                        <div class="layerInner">
+                          <img class="layerAsset layerAsset--endzone" src="/stadium/06-endzone-base.png" alt="" aria-hidden="true" />
+                          <div class="sparkleRegion sparkleRegion--endzone-stands" aria-hidden="true"></div>
+                          <div class="sparkleRegion sparkleRegion--tower-top" aria-hidden="true"></div>
+                          <div class="ledOverlay" aria-hidden="true">
+                            <span class="ledChar ledChar--1">G</span>
+                            <span class="ledChar ledChar--2">O</span>
+                            <span class="ledChar ledChar--3">H</span>
+                            <span class="ledChar ledChar--4">A</span>
+                            <span class="ledChar ledChar--5">W</span>
+                            <span class="ledChar ledChar--6">K</span>
+                            <span class="ledChar ledChar--7">S</span>
+                            <span class="ledChar ledChar--8">!</span>
+                          </div>
+                          <img class="layerAsset layerAsset--flag" src="/stadium/05-flag.png" alt="" aria-hidden="true" />
+                        </div>
+                      </div>
+                      <div class="layerWrap layerWrap--field" data-layer="field" aria-hidden="true">
+                        <div class="layerInner">
+                          <img class="layerAsset" src="/stadium/07-field.png" alt="" aria-hidden="true" />
+                        </div>
+                      </div>
+                    </div>
+                    <div class="vignette" aria-hidden="true"></div>
+                    <div id="splashText" aria-hidden="true">
+                      <div class="splash-line splash-line--1">THE SEAHAWKS</div>
+                      <div class="splash-line splash-line--2">ARE FOR SALE.</div>
+                      <div class="splash-line splash-line--3">WE CAN BUY THEM.</div>
+                      <div class="splash-line splash-line--4">TOGETHER.</div>
+                    </div>
+                    <div id="postSplashUi" class="uiOverlay" aria-live="polite">
+                      <h1 class="uiOverlay__headline">Community Proposal<br />to purchase the seattle<br />Seahawks</h1>
+                      <div class="uiOverlay__actions">
+                        <button id="readProposalBtn" class="uiBtn uiBtn--secondary" type="button" onclick="window.__triggerProposalReveal && window.__triggerProposalReveal(); return false;">READ THE<br />PROPOSAL</button>
+                        <button id="joinCollectiveBtn" class="uiBtn uiBtn--primary" type="button">JOIN THE<br />COLLECTIVE</button>
+                      </div>
+                    </div>
+                    <div id="proposalRevealLayer" aria-hidden="true">
+                      <img id="proposalHawk" class="proposalSprite proposalSprite--hawk" src="/assets/hawk-with-scroll.png" alt="" />
+                      <img id="proposalClosedScroll" class="proposalSprite proposalSprite--closedScroll" src="/assets/closed-scroll.png" alt="" />
+                      <img id="proposalOpenScroll" class="proposalSprite proposalSprite--openScroll" src="/assets/open-scroll.png" alt="" />
+                      <article id="proposalContent" aria-label="Proposal content surface">
+                        <h2 class="proposal-title">A Community Proposal</h2>
+                        <p class="proposal-body">
+                          As directed by the will of the late, great Paul Allen, the Seahawks are to be sold, with proceeds benefiting charity. The franchise is expected to set a league record, with an estimated sale price between $7 and $10 billion.
+                        </p>
+                        <p class="proposal-emphasis">So let&rsquo;s aim higher.</p>
+                        <p class="proposal-emphasis">We intend to place a bid of $12 billion.</p>
+                        <p class="proposal-emphasis">Not from a billionaire.</p>
+                        <p class="proposal-emphasis">From everyone.</p>
+                        <p class="proposal-body">
+                          Inspired by the public ownership structure of the Green Bay Packers, we propose a collective bid, raised by the Seahawks community:
+                        </p>
+                        <p class="proposal-emphasis">One share per person.</p>
+                        <p class="proposal-emphasis">Equal stake.</p>
+                        <p class="proposal-emphasis">Total cost divided evenly.</p>
+                        <p class="proposal-emphasis">No VIP class.</p>
+                        <p class="proposal-emphasis">No majority owner.</p>
+                        <p class="proposal-emphasis">No &ldquo;control interest.&rdquo;</p>
+                        <p class="proposal-emphasis">A team for the people, by the people, of the people.</p>
 
+                        <h3 class="proposal-subhead">Let&rsquo;s Do the Math</h3>
+                        <p class="proposal-body">
+                          To own the team ourselves, we only need a mere $15,365.02 each from all 780,995 residents of Seattle. Alternatively, opening shares to all 8.1 million residents of Washington State would drop the commitment to an $1,478.72 per share. A remarkable bargain to own this historic, championship-winning team.
+                        </p>
+                        <p class="proposal-body">
+                          The more people who join, the lower the individual commitment goes.
+                        </p>
+
+                        <h3 class="proposal-subhead">For Perspective</h3>
+                        <p class="proposal-body">
+                          Paul Allen bought the Seahawks in 1997 for roughly $194 million.
+                        </p>
+                        <p class="proposal-body">
+                          At today&rsquo;s projected valuation, that represents a return north of 35 times the original investment.
+                        </p>
+                        <p class="proposal-body">
+                          Now imagine what your share might be worth in 30 years.
+                        </p>
+                        <p class="proposal-body">
+                          That is, of course, if you ever chose to sell it.
+                        </p>
+                        <p class="proposal-body">
+                          Kickoff is only <span id="kickoffCountdownDays">--</span> days away. Will you be watching from your couch, or from the owner&rsquo;s suite?
+                        </p>
+                        <p class="proposal-emphasis">Join the collective bid TODAY!</p>
+
+                        <h3 class="proposal-subhead">The Necessary Fine Print</h3>
+                        <p class="proposal-body">
+                          This proposal is conceptual. We are not collecting funds. No money is being solicited. No financial commitments are binding.
+                        </p>
+                        <p class="proposal-body">
+                          If this were ever to become real, there would be lawyers. Many lawyers.
+                        </p>
+                        <p class="proposal-body">
+                          Submitting your name does not obligate you to purchase anything. It simply signals interest in the idea of collective ownership.
+                        </p>
+                        <p class="proposal-body">
+                          That said &mdash; it would be fairly anticlimactic to enthusiastically pledge support and then disappear the moment someone hands you actual paperwork.
+                        </p>
+                        <p class="proposal-body">
+                          Email addresses are optional. If you choose to share one, it will be used solely for updates related to this project. We will not sell it, share it, trade it, lease it, or accidentally &ldquo;expose it in a CSV.&rdquo;
+                        </p>
+                        <p class="proposal-body">
+                          We are not affiliated with the Seattle Seahawks organization or the Paul Allen estate.
+                        </p>
+                        <p class="proposal-body">
+                          This project is an independent civic concept developed by
+                          <a class="proposal-link" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">Extra Good Studio</a>.
+                        </p>
+                      </article>
+                      <button id="proposalCloseBtn" type="button" aria-label="Close proposal scroll">X</button>
+                    </div>
+                    <div id="jumbotronLayer" aria-hidden="true">
+                      <div class="jumbotronShell">
+                        <img src="/assets/jumbotron-frame.png" alt="" class="jumbotronFrame" />
+                        <div id="jumbotronContent" class="jumbotronContent">
+                          <div class="jumbotronSlot jumbotronSlot--bid"></div>
+                          <div class="jumbotronSlot jumbotronSlot--shareholders"></div>
+                          <div class="jumbotronSlot jumbotronSlot--commitment"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div id="seaplaneOverlay" aria-hidden="true"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FUTURE_COPY_DO_NOT_DELETE: preserved for later reintroduction -->
+    <main class="page gameday-page future-copy-block" hidden aria-hidden="true">
       <header class="hero">
+        <p class="hero-kicker">SPORTS NEWS BULLETIN</p>
         <h1>A Community Proposal to Purchase the Seattle Seahawks</h1>
         <p>
           As directed by the late Paul Allen, the Seattle Seahawks are to be sold, with proceeds benefiting philanthropic causes. This proposal invites the people of Seattle and supporters everywhere to consider a collective purchase model inspired by Green Bay public ownership.
@@ -28,65 +193,64 @@
       </header>
 
       <section class="callout">
-        <p>The Seahawks will be sold.</p>
-        <p>This is a proposal to buy them.</p>
-        <p>Together.</p>
+        <p>THE SEAHAWKS WILL BE SOLD.</p>
+        <p>THIS IS A PROPOSAL TO BUY THEM.</p>
+        <p>TOGETHER.</p>
       </section>
 
-      <section class="module" aria-labelledby="stats-heading">
+      <section class="module module--tracker" aria-labelledby="stats-heading">
         <h2 id="stats-heading">Financial Model</h2>
-        <div class="stats-grid">
-          <article>
-            <h3>Purchase Price</h3>
-            <p id="purchasePrice" class="stat-value">$12,000,000,000</p>
-          </article>
-          <article>
-            <h3>Participants</h3>
-            <p id="participantsCount" class="stat-value">0</p>
-          </article>
-          <article>
-            <h3>Equal Share Per Participant</h3>
-            <p id="equalShare" class="stat-value">Not yet calculable</p>
-          </article>
+        <p class="financial-context">
+          The Seahawks franchise is expected to set a new NFL record, with valuations ranging from $7–$10B. We propose an aggressive and symbolic bid of $12B.
+        </p>
+        <section class="scoreboard" role="status" aria-live="polite" aria-label="Public Ownership Tracker">
+          <div class="scoreboard__crown" aria-hidden="true"></div>
+          <div class="scoreboard__mount scoreboard__mount--left" aria-hidden="true"></div>
+          <div class="scoreboard__mount scoreboard__mount--right" aria-hidden="true"></div>
+          <div class="scoreboard__bezel">
+            <div class="scoreboard__title">PUBLIC OWNERSHIP TRACKER</div>
+            <div class="scoreboard__screen">
+              <article class="scoreboard__panel">
+              <h3>CURRENT COMMUNITY SHAREHOLDERS</h3>
+                <p id="participantsCount" class="scoreboard__digits">000000</p>
+              </article>
+              <article class="scoreboard__panel">
+              <h3>COMMITMENT PER SHAREHOLDER</h3>
+                <p id="equalShare" class="scoreboard__digits">N/A</p>
+              </article>
+            </div>
+            <p class="scoreboard-helper">Equal shares. More people = lower commitment.</p>
+          </div>
+          <div class="scoreboard__bracket" aria-hidden="true"></div>
+        </section>
+        <div class="scoreboard-cta">
+          <button id="jumpToSignup" type="button">Join the shareholder community</button>
+          <p>Add your commitment. Watch the commitment drop.</p>
         </div>
       </section>
 
-      <section class="module" aria-labelledby="join-heading">
+      <section class="module module--join" id="join-section" aria-labelledby="join-heading">
         <h2 id="join-heading">Join the Purchasing Collective</h2>
         <form id="participantForm" novalidate>
           <label>
-            Name or Initials
-            <input id="name" name="name" required maxlength="60" />
-          </label>
-
-          <label>
-            Washington County
-            <select id="county" name="county" required>
-              <option value="">Select a county</option>
+            County (optional)
+            <select id="county" name="county">
+              <option value="">Prefer not to say</option>
             </select>
           </label>
 
-          <label>
-            Email (optional)
-            <input id="email" name="email" type="email" maxlength="120" />
-          </label>
-
-          <button type="submit">Record Participation</button>
+          <button type="submit">Record Anonymous Commitment</button>
           <p id="formMessage" class="form-message" aria-live="polite"></p>
         </form>
-      </section>
-
-      <section class="module" aria-labelledby="ledger-heading">
-        <h2 id="ledger-heading">Public Ledger</h2>
-        <p>Entries are listed in the order recorded.</p>
-        <ul id="ledger" class="ledger"></ul>
       </section>
 
       <footer class="footnote">
         <p>This is a conceptual public-interest prototype. It is not a securities offering and creates no legal ownership.</p>
       </footer>
     </main>
+    <!-- /FUTURE_COPY_DO_NOT_DELETE -->
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/app.js"></script>
   </body>
 </html>

@@ -669,7 +669,7 @@ body.ui-btn-labels-stacked .uiBtn__label {
   font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
   font-size: clamp(14px, calc(28px * var(--ui-scale)), 32px);
   font-weight: 700;
-  text-transform: none;
+  text-transform: uppercase;
   letter-spacing: 0.03em;
   line-height: 1.05;
   text-align: center;
@@ -681,6 +681,7 @@ body.ui-btn-labels-stacked .uiBtn__label {
   font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
   font-size: clamp(11px, calc(20px * var(--ui-scale)), 23px);
   font-weight: 700;
+  text-transform: uppercase;
   letter-spacing: 0.02em;
   line-height: 1.14;
   text-align: center;
@@ -2002,7 +2003,7 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  background: rgba(3, 9, 22, 0.36);
+  background: rgba(8, 18, 46, 0.62);
 }
 
 .subscribeOverlay__panel {
@@ -2017,44 +2018,36 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
   align-items: center;
   justify-content: flex-start;
   gap: clamp(10px, calc(14px * var(--ui-scale)), 18px);
-  padding: clamp(14px, calc(26px * var(--ui-scale)), 32px);
-  border: 2px solid #0b132b;
-  background: linear-gradient(180deg, #040912 0%, #081731 100%);
+  padding: clamp(14px, calc(24px * var(--ui-scale)), 30px);
+  border: 2px solid #b2b4b1;
+  background: #263c92;
   box-shadow:
-    0 0 0 2px #263a7f,
-    0 0 0 4px #ffffff,
-    0 0 0 6px #108040,
-    0 12px 0 rgba(2, 8, 20, 0.84);
+    0 0 0 2px #b2b4b1,
+    0 0 0 4px #108040,
+    0 8px 0 rgba(5, 12, 30, 0.55);
   overflow: hidden;
-  isolation: isolate;
 }
 
 .subscribeOverlay__panel::before {
   content: "";
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: clamp(8px, calc(10px * var(--ui-scale)), 12px);
+  background: #108040;
   pointer-events: none;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      rgba(255, 255, 255, 0.035) 0 1px,
-      rgba(0, 0, 0, 0) 1px 4px
-    );
-  opacity: 0.24;
-  z-index: 0;
 }
 
 .subscribeOverlay__panel::after {
   content: "";
   position: absolute;
-  inset: clamp(10px, calc(14px * var(--ui-scale)), 16px);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: clamp(5px, calc(7px * var(--ui-scale)), 9px);
+  background: #b2b4b1;
   pointer-events: none;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
-  opacity: 0.62;
-  z-index: 0;
 }
 
 .subscribeOverlay__panel > * {
@@ -2069,15 +2062,17 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
   align-items: center;
   justify-content: center;
   align-self: center;
+  text-decoration: none;
 }
 
 .subscribeOverlay__logoLink:hover {
-  filter: brightness(1.08);
+  filter: brightness(1.06);
 }
 
 .subscribeOverlay__logo {
-  width: clamp(120px, 18vw, 180px);
+  width: clamp(60px, 9vw, 90px);
   height: auto;
+  filter: brightness(0) invert(1);
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -2086,57 +2081,33 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
   margin: 0;
   color: #ffffff;
   font-family: "Press Start 2P", "VT323", monospace;
-  font-size: clamp(12px, calc(22px * var(--ui-scale)), 26px);
+  font-size: clamp(12px, calc(21px * var(--ui-scale)), 25px);
   line-height: 1.2;
   text-align: center;
-  text-transform: none;
-  text-shadow:
-    0 1px 0 rgba(20, 46, 104, 0.95),
-    0 2px 0 rgba(12, 26, 62, 0.95);
+  text-transform: uppercase;
+  text-shadow: none;
 }
 
 .subscribeOverlay__screen {
   position: relative;
-  width: min(94%, 620px);
-  flex: 1 1 auto;
+  width: min(96%, 660px);
+  flex: 0 0 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(10px, calc(14px * var(--ui-scale)), 18px);
-  padding: clamp(10px, calc(16px * var(--ui-scale)), 22px);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  background: #020711;
-  box-shadow:
-    inset 0 0 0 1px rgba(16, 128, 64, 0.85),
-    inset 0 0 0 3px rgba(38, 58, 127, 0.9);
-  overflow-y: auto;
-  overflow-x: hidden;
+  gap: 0;
+  padding: clamp(8px, calc(12px * var(--ui-scale)), 14px);
+  border: 1px solid #b2b4b1;
+  background: rgba(15, 35, 102, 0.88);
+  box-shadow: inset 0 0 0 2px rgba(16, 132, 64, 0.38);
+  overflow-y: hidden;
+  overflow-x: visible;
 }
 
-.subscribeOverlay__screen::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      rgba(255, 255, 255, 0.05) 0 1px,
-      rgba(0, 0, 0, 0) 1px 3px
-    );
-  opacity: 0.2;
-  z-index: 0;
-}
-
+.subscribeOverlay__screen::before,
 .subscribeOverlay__screen::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 36%);
-  opacity: 0.55;
-  z-index: 0;
+  content: none;
 }
 
 .subscribeOverlay__screen > * {
@@ -2147,12 +2118,12 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
 .subscribeOverlay__body {
   width: 100%;
   margin: 0;
-  color: #f2f6ff;
+  color: #ffffff;
   font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
   font-size: clamp(10px, calc(15px * var(--ui-scale)), 19px);
-  line-height: 1.5;
+  line-height: 1.48;
   text-align: left;
-  text-shadow: 0 0 2px rgba(105, 190, 40, 0.18);
+  text-shadow: none;
 }
 
 .subscribeOverlay__body p {
@@ -2166,24 +2137,24 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
 .subscribeOverlay__bodyLink {
   color: #69be28;
   font-weight: 700;
-  text-decoration: none;
-}
-
-.subscribeOverlay__bodyLink:hover {
-  filter: brightness(1.1);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
+.subscribeOverlay__bodyLink:hover {
+  color: #ffffff;
+}
+
 .subscribeOverlay__kitMount {
-  width: min(92%, 520px);
-  max-width: 520px;
-  min-height: clamp(130px, calc(170px * var(--ui-scale)), 220px);
+  width: 100%;
+  max-width: 640px;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: auto;
-  padding-top: clamp(6px, calc(10px * var(--ui-scale)), 14px);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .subscribeOverlay__kitMount > * {
@@ -2197,6 +2168,7 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
   transform: translateY(0);
   z-index: 229;
 }
+
 
 body.subscribe-open .subscribeOverlay {
   opacity: 1;

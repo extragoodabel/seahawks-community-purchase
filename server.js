@@ -3,183 +3,265 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 
-const PORT = process.env.PORT ? Number(process.env.PORT) : 5001;
+const PORT = Number(process.env.PORT || 5001);
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const PURCHASE_PRICE = 12_000_000_000;
 
-const WA_COUNTIES = [
-  'Adams', 'Asotin', 'Benton', 'Chelan', 'Clallam', 'Clark', 'Columbia',
-  'Cowlitz', 'Douglas', 'Ferry', 'Franklin', 'Garfield', 'Grant',
-  'Grays Harbor', 'Island', 'Jefferson', 'King', 'Kitsap', 'Kittitas',
-  'Klickitat', 'Lewis', 'Lincoln', 'Mason', 'Okanogan', 'Pacific',
-  'Pend Oreille', 'Pierce', 'San Juan', 'Skagit', 'Skamania',
-  'Snohomish', 'Spokane', 'Stevens', 'Thurston', 'Wahkiakum',
-  'Walla Walla', 'Whatcom', 'Whitman', 'Yakima'
-];
+const PUBLIC_DIR = path.join(__dirname, 'public');
 
-const participants = [];
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.webp': 'image/webp'
+};
 
-function sendJson(res, statusCode, data) {
-  res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
-  res.end(JSON.stringify(data));
+function json(res, statusCode, payload) {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store'
+  });
+  res.end(JSON.stringify(payload));
 }
 
-function sendText(res, statusCode, text, contentType = 'text/plain; charset=utf-8') {
-  res.writeHead(statusCode, { 'Content-Type': contentType });
-  res.end(text);
+function notFound(res) {
+  json(res, 404, { error: 'Not found' });
 }
 
-function sanitizeName(input) {
-  return String(input || '')
-    .replace(/[^a-zA-Z\s'\-]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 60);
-}
-
-function initials(fullName) {
-  const parts = String(fullName).split(' ').filter(Boolean);
-  if (parts.length === 0) return '';
-  if (parts.length === 1) return `${parts[0][0].toUpperCase()}.`;
-  return `${parts[0][0].toUpperCase()}. ${parts[parts.length - 1][0].toUpperCase()}.`;
-}
-
-function statsPayload() {
-  const participantsCount = participants.length;
-  return {
-    purchasePrice: PURCHASE_PRICE,
-    participantsCount,
-    equalShare: participantsCount === 0 ? null : PURCHASE_PRICE / participantsCount
-  };
-}
-
-function participantListPayload() {
-  return participants
-    .slice()
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .map((p) => ({
-      id: p.id,
-      initials: initials(p.fullName),
-      county: p.county,
-      createdAt: p.createdAt
-    }));
-}
-
-function readBody(req) {
+function parseBody(req) {
   return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on('data', (chunk) => chunks.push(chunk));
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    let raw = '';
+
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 50_000) {
+        reject(new Error('Request body too large.'));
+        req.destroy();
+      }
+    });
+
+    req.on('end', () => {
+      if (!raw) {
+        resolve({});
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        reject(new Error('Invalid JSON body.'));
+      }
+    });
+
     req.on('error', reject);
   });
 }
 
-function serveStatic(req, res, pathname) {
-  const filePath = pathname === '/' ? '/index.html' : pathname;
-  const resolvedPath = path.join(__dirname, 'public', filePath);
+function sanitizeCounty(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
 
-  if (!resolvedPath.startsWith(path.join(__dirname, 'public'))) {
-    sendText(res, 403, 'Forbidden');
+  // Basic privacy-first sanitization: trim, strip tags, remove control chars.
+  const cleaned = value
+    .trim()
+    .replace(/<[^>]*>/g, '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/\s+/g, ' ');
+
+  if (!cleaned) return null;
+  return cleaned.slice(0, 80);
+}
+
+function computeStats(participantsCount) {
+  const safeCount = Number.isFinite(participantsCount) ? Math.max(0, Math.floor(participantsCount)) : 0;
+  return {
+    purchasePrice: PURCHASE_PRICE,
+    participantsCount: safeCount,
+    equalShare: PURCHASE_PRICE / Math.max(safeCount, 1)
+  };
+}
+
+function supabaseHeaders() {
+  return {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    'Content-Type': 'application/json'
+  };
+}
+
+async function supabaseRequest(endpoint, options = {}) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.');
+  }
+
+  const response = await fetch(`${SUPABASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      ...supabaseHeaders(),
+      ...(options.headers || {})
+    }
+  });
+
+  const text = await response.text();
+  let data = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+
+  if (!response.ok) {
+    const message = typeof data === 'string'
+      ? data
+      : (data && (data.message || data.error || data.hint)) || `Supabase request failed (${response.status}).`;
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+async function getStatsRow() {
+  const rows = await supabaseRequest('/rest/v1/stats?id=eq.1&select=participants_count', {
+    method: 'GET'
+  });
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error('Stats row id=1 is missing.');
+  }
+
+  return rows[0];
+}
+
+async function insertCommitment(county) {
+  const payload = county ? { county } : {};
+  await supabaseRequest('/rest/v1/commitments', {
+    method: 'POST',
+    headers: {
+      Prefer: 'return=minimal'
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+async function incrementParticipantsCount() {
+  const result = await supabaseRequest('/rest/v1/rpc/increment_participants_count', {
+    method: 'POST',
+    body: JSON.stringify({})
+  });
+
+  if (!Array.isArray(result) || result.length === 0 || typeof result[0].participants_count !== 'number') {
+    throw new Error('RPC increment_participants_count returned an unexpected payload.');
+  }
+
+  return result[0].participants_count;
+}
+
+function serveStatic(reqPath, res) {
+  let decodedPath = reqPath;
+  try {
+    decodedPath = decodeURIComponent(reqPath);
+  } catch {
+    notFound(res);
     return;
   }
 
-  fs.readFile(resolvedPath, (err, data) => {
+  let filePath = decodedPath === '/' ? '/index.html' : decodedPath;
+  filePath = path.normalize(filePath).replace(/^(\.\.[/\\])+/, '');
+  const absolutePath = path.join(PUBLIC_DIR, filePath);
+
+  if (!absolutePath.startsWith(PUBLIC_DIR)) {
+    notFound(res);
+    return;
+  }
+
+  fs.readFile(absolutePath, (err, data) => {
     if (err) {
-      sendText(res, 404, 'Not Found');
+      notFound(res);
       return;
     }
 
-    const ext = path.extname(resolvedPath);
-    const contentType = {
-      '.html': 'text/html; charset=utf-8',
-      '.css': 'text/css; charset=utf-8',
-      '.js': 'application/javascript; charset=utf-8',
-      '.json': 'application/json; charset=utf-8',
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif',
-      '.svg': 'image/svg+xml'
-    }[ext] || 'application/octet-stream';
-
-    sendText(res, 200, data, contentType);
+    const ext = path.extname(absolutePath).toLowerCase();
+    res.writeHead(200, {
+      'Content-Type': MIME_TYPES[ext] || 'application/octet-stream'
+    });
+    res.end(data);
   });
 }
 
 const server = http.createServer(async (req, res) => {
+  const reqUrl = new URL(req.url, `http://${req.headers.host}`);
+  const pathname = reqUrl.pathname;
+
+  // Basic CORS for local sharing.
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
   try {
-    const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
-    const { pathname } = parsedUrl;
+    if (req.method === 'GET' && pathname === '/health') {
+      json(res, 200, { ok: true });
+      return;
+    }
 
     if (req.method === 'GET' && pathname === '/api/stats') {
-      sendJson(res, 200, statsPayload());
+      const row = await getStatsRow();
+      json(res, 200, computeStats(Number(row.participants_count)));
       return;
     }
 
     if (req.method === 'GET' && pathname === '/api/participants') {
-      sendJson(res, 200, {
-        list: participantListPayload(),
-        count: participants.length
-      });
+      notFound(res);
       return;
     }
 
     if (req.method === 'POST' && pathname === '/api/participants') {
-      const rawBody = await readBody(req);
-      let payload;
+      notFound(res);
+      return;
+    }
 
-      try {
-        payload = JSON.parse(rawBody || '{}');
-      } catch {
-        sendJson(res, 400, { error: 'Invalid JSON body.' });
-        return;
-      }
+    if (req.method === 'POST' && pathname === '/api/commitments') {
+      const body = await parseBody(req);
+      const county = sanitizeCounty(body.county);
 
-      const fullName = sanitizeName(payload.name);
-      const county = String(payload.county || '').trim();
-      const email = String(payload.email || '').trim().slice(0, 120);
+      await insertCommitment(county);
+      const participantsCount = await incrementParticipantsCount();
 
-      if (!fullName) {
-        sendJson(res, 400, { error: 'Name is required.' });
-        return;
-      }
-
-      if (!WA_COUNTIES.includes(county)) {
-        sendJson(res, 400, { error: 'Valid Washington county is required.' });
-        return;
-      }
-
-      const id = participants.length + 1;
-      participants.push({
-        id,
-        fullName,
-        county,
-        email: email || null,
-        createdAt: Date.now()
-      });
-
-      sendJson(res, 201, {
+      json(res, 200, {
         ok: true,
-        stats: statsPayload(),
-        participant: {
-          id,
-          initials: initials(fullName),
-          county
-        }
+        stats: computeStats(participantsCount)
       });
       return;
     }
 
     if (pathname.startsWith('/api/')) {
-      sendJson(res, 404, { error: 'Not found.' });
+      notFound(res);
       return;
     }
 
-    serveStatic(req, res, pathname);
+    serveStatic(pathname, res);
   } catch (err) {
-    sendJson(res, 500, { error: 'Internal server error.' });
+    json(res, 500, { error: err.message || 'Server error' });
   }
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Server running at http://127.0.0.1:${PORT}`);
+  console.log(`Seahawks Community Proposal server running at http://127.0.0.1:${PORT}`);
 });

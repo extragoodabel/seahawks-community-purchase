@@ -3,8 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "description": "Seattle Seahawks community purchase proposal prototype",
+  "workspaces": [
+    "client",
+    "server"
+  ],
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node --watch server.js",
+    "start": "node server.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
   }
 }

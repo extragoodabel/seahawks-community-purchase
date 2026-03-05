@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Seattle Seahawks Community Purchase Proposal</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" />
     <link rel="preload" as="image" href="/stadium/01-mountains.png" />
     <link rel="preload" as="image" href="/stadium/02-skyline.png" />
     <link rel="preload" as="image" href="/stadium/03-stadium-left.png" />
@@ -11,6 +12,8 @@
     <link rel="preload" as="image" href="/stadium/05-flag.png" />
     <link rel="preload" as="image" href="/stadium/06-endzone-base.png" />
     <link rel="preload" as="image" href="/stadium/07-field.png" />
+    <link rel="preload" as="image" href="/assets/little-screens.png" />
+    <link rel="preload" as="image" href="/assets/little-screens-12.png" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body class="splash-active" data-supabase-url="" data-supabase-anon-key="">
@@ -51,6 +54,20 @@
                       <div class="layerWrap layerWrap--endzone" data-layer="endzone-group" aria-hidden="true">
                         <div class="layerInner">
                           <img class="layerAsset layerAsset--endzone" src="/stadium/06-endzone-base.png" alt="" aria-hidden="true" />
+                          <img
+                            id="littleScreensDim"
+                            class="layerAsset layerAsset--littleScreens"
+                            src="/assets/little-screens.png"
+                            alt=""
+                            aria-hidden="true"
+                          />
+                          <img
+                            id="littleScreensLit"
+                            class="layerAsset layerAsset--littleScreens layerAsset--littleScreensLit"
+                            src="/assets/little-screens-12.png"
+                            alt=""
+                            aria-hidden="true"
+                          />
                           <div class="sparkleRegion sparkleRegion--endzone-stands" aria-hidden="true"></div>
                           <div class="sparkleRegion sparkleRegion--tower-top" aria-hidden="true"></div>
                           <div class="ledOverlay" aria-hidden="true">
@@ -66,6 +83,46 @@
                           <img class="layerAsset layerAsset--flag" src="/stadium/05-flag.png" alt="" aria-hidden="true" />
                         </div>
                       </div>
+                      <div id="jumbotronOverlay" class="layerWrap layerWrap--jumbotron" data-layer="jumbotron" aria-hidden="true">
+                        <div class="layerInner">
+                          <div class="jumbotronAnchor">
+                            <div id="jumbotronPanel" class="jumbotronPanel" role="dialog" aria-modal="true" aria-label="Run the Numbers">
+                              <div class="jumbotronFrame">
+                                <img src="/assets/jumbotron-frame.png" alt="" class="jumbotronFrameImg" />
+                                <div id="jumbotronGlassLayer" aria-hidden="true">
+                                  <img id="jumbotronGlassSprite" alt="" />
+                                </div>
+                                <div class="jumbotronContent">
+                                  <div class="jumbotronScreen" data-testid="jumbotronScreen">
+                                    <div class="jumbotronScreenContent jumbotronScoreboardCopy">
+                                      <div id="jumbotronShareholdersHeading" class="jumbotronLine jumbotronLine--label jumbotronFitText" data-testid="jhSharehawksLabel">
+                                        NUMBER OF SHARE-HAWKS
+                                      </div>
+                                      <div id="jumbotronShareholdersValue" class="jumbotronLine jumbotronLine--value jumbotronFitText" data-testid="jhValueTop" data-impact-target="sharehawksValueRow">
+                                        000,000
+                                      </div>
+                                      <div class="jumbotronDivider" aria-hidden="true"></div>
+                                      <div class="jumbotronSpacer" aria-hidden="true"></div>
+                                      <div id="jumbotronCommitmentHeading" class="jumbotronLine jumbotronLine--label jumbotronFitText" data-testid="jhInvestmentLabel">
+                                        INVESTMENT/SHARE-HAWK
+                                      </div>
+                                      <div id="jumbotronCommitmentValue" class="jumbotronLine jumbotronLine--value jumbotronFitText" data-testid="jhValueBottom">
+                                        $12,000,000,000
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            <div id="jumbotronImpactLayer" aria-hidden="true">
+                              <img id="jumbotronImpactSprite" alt="" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <button id="jumbotronCloseBtn" class="uiClose uiClose--floating" type="button" aria-label="Close run the numbers">
+                        <span class="uiClose__glyph" aria-hidden="true">X</span>
+                      </button>
                       <div class="layerWrap layerWrap--field" data-layer="field" aria-hidden="true">
                         <div class="layerInner">
                           <img class="layerAsset" src="/stadium/07-field.png" alt="" aria-hidden="true" />
@@ -79,12 +136,72 @@
                       <div class="splash-line splash-line--3">WE CAN BUY THEM.</div>
                       <div class="splash-line splash-line--4">TOGETHER.</div>
                     </div>
+                    <button id="skipIntro" class="skipIntroBtn" type="button">Skip intro</button>
                     <div id="postSplashUi" class="uiOverlay" aria-live="polite">
-                      <h1 class="uiOverlay__headline">Community Proposal<br />to purchase the seattle<br />Seahawks</h1>
+                      <h1 class="uiOverlay__headline" data-testid="mainHeading">Community Proposal to Purchase the Seattle&nbsp;Seahawks</h1>
+                      <h2 class="uiOverlay__headlineAlt" data-testid="jumbotronHeading">We propose a bid of $12,000,000,000.<br />The math favors the many.</h2>
                       <div class="uiOverlay__actions">
-                        <button id="readProposalBtn" class="uiBtn uiBtn--secondary" type="button" onclick="window.__triggerProposalReveal && window.__triggerProposalReveal(); return false;">READ THE<br />PROPOSAL</button>
-                        <button id="joinCollectiveBtn" class="uiBtn uiBtn--primary" type="button">JOIN THE<br />COLLECTIVE</button>
+                        <div class="actionRow actionRow--primary">
+                          <button id="readProposalBtn" class="uiBtn uiBtn--secondary" type="button" onclick="window.__triggerProposalReveal && window.__triggerProposalReveal(); return false;">
+                            <span class="uiBtn__label">READ THE PROPOSAL</span>
+                          </button>
+                          <button id="joinCollectiveBtn" class="uiBtn uiBtn--primary" type="button">
+                            <span class="uiBtn__label">RUN THE NUMBERS</span>
+                          </button>
+                          <button id="shareHawkBtn" class="uiBtn uiBtn--sharehawk" type="button">
+                            <span class="uiBtn__label">BECOME A SHARE-HAWK</span>
+                          </button>
+                        </div>
+                        <div id="actionRowSecondary" class="actionRow actionRow--secondary" aria-hidden="true">
+                          <button id="shareBtn" class="uiBtn uiBtn--tertiary" type="button">
+                            <span class="uiBtn__label">SHARE</span>
+                          </button>
+                          <button id="subscribeBtn" class="uiBtn uiBtn--tertiary" type="button">
+                            <span class="uiBtn__label">SUBSCRIBE</span>
+                          </button>
+                        </div>
                       </div>
+                      <div id="uiToast" class="uiToast" role="status" aria-live="polite"></div>
+                    </div>
+                    <div id="fieldWelcomeMsg" class="fieldWelcomeMsg" aria-live="polite">WELCOME TO THE TEAM!</div>
+                    <button id="claimShareBtn" class="claimShareBtn" type="button" aria-label="Claim Your Share">
+                      <img
+                        class="claimShareBtn__img"
+                        src="/assets/claim-your-share-button.png"
+                        alt="Claim Your Share"
+                      />
+                    </button>
+                    <div id="receiptPreviewOverlay" class="receiptPreviewOverlay" aria-hidden="true">
+                      <div id="receiptPreviewCard" class="receiptPreviewCard">
+                        <img id="receiptPreviewImage" class="receiptPreviewImage" alt="Share-hawk receipt preview" />
+                      </div>
+                      <div id="receiptPreviewHint" class="receiptPreviewHint" aria-live="polite">
+                        <span class="receiptPreviewHint__desktop">Click to download</span>
+                        <span class="receiptPreviewHint__mobile">Hold down to save</span>
+                      </div>
+                      <button id="receiptPreviewCloseBtn" class="uiClose" type="button" aria-label="Close receipt preview">
+                        <span class="uiClose__glyph" aria-hidden="true">X</span>
+                      </button>
+                    </div>
+                    <div id="subscribeOverlay" class="subscribeOverlay" aria-hidden="true">
+                      <div class="subscribeOverlay__panel" role="dialog" aria-modal="true" aria-label="Subscribe for updates">
+                        <h3 class="subscribeOverlay__title">We're Serious. Are You?</h3>
+                        <p class="subscribeOverlay__body">
+                          If you'd like stay informed about the progress of this campaign, please sign up! Otherwise we won't know how to reach you when it's time to pay the bill.
+                        </p>
+                        <div id="kitSubscribeMount" class="subscribeOverlay__kitMount"></div>
+                        <footer class="subscribeOverlay__footer">
+                          <a class="subscribeOverlay__footerLink" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">
+                            This is an Extra Good Studio production
+                          </a>
+                          <a class="subscribeOverlay__logoLink" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">
+                            <img src="/assets/extragood-logo.png" alt="Extra Good Studio" class="subscribeOverlay__logo" />
+                          </a>
+                        </footer>
+                      </div>
+                      <button id="subscribeCloseBtn" class="uiClose" type="button" aria-label="Close subscribe window">
+                        <span class="uiClose__glyph" aria-hidden="true">X</span>
+                      </button>
                     </div>
                     <div id="proposalRevealLayer" aria-hidden="true">
                       <img id="proposalHawk" class="proposalSprite proposalSprite--hawk" src="/assets/hawk-with-scroll.png" alt="" />
@@ -160,18 +277,13 @@
                           <a class="proposal-link" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">Extra Good Studio</a>.
                         </p>
                       </article>
-                      <button id="proposalCloseBtn" type="button" aria-label="Close proposal scroll">X</button>
+                      <button id="proposalCloseBtn" class="uiClose" type="button" aria-label="Close proposal scroll">
+                        <span class="uiClose__glyph" aria-hidden="true">X</span>
+                      </button>
                     </div>
-                    <div id="jumbotronLayer" aria-hidden="true">
-                      <div class="jumbotronShell">
-                        <img src="/assets/jumbotron-frame.png" alt="" class="jumbotronFrame" />
-                        <div id="jumbotronContent" class="jumbotronContent">
-                          <div class="jumbotronSlot jumbotronSlot--bid"></div>
-                          <div class="jumbotronSlot jumbotronSlot--shareholders"></div>
-                          <div class="jumbotronSlot jumbotronSlot--commitment"></div>
-                        </div>
-                      </div>
-                    </div>
+                    <canvas id="fxFireworksCanvas" class="fxCanvas fxCanvas--fireworks" aria-hidden="true"></canvas>
+                    <canvas id="fxConfettiCanvas" class="fxCanvas fxCanvas--confetti" aria-hidden="true"></canvas>
+                    <div id="eagleOverlay" aria-hidden="true"></div>
                     <div id="seaplaneOverlay" aria-hidden="true"></div>
                   </div>
                 </div>

@@ -1,0 +1,41 @@
+:root {
+  color-scheme: light;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+body {
+  margin: 0;
+  background: #cccbcc;
+}
+
+.page {
+  width: min(960px, 100%);
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.module {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid #000;
+  background: #fff;
+}
+
+label {
+  display: block;
+  margin: 8px 0;
+}
+
+input,
+select,
+button {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  margin-top: 4px;
+  padding: 8px;
+}
+
+ul {
+  padding-left: 20px;
+}

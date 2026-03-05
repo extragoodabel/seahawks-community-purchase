@@ -240,6 +240,8 @@ let littleScreensTimerId = 0;
 let littleScreensLit = false;
 let jumbotronFitRaf = 0;
 let jumbotronCountdownTimerId = 0;
+let jumbotronStatsPollTimerId = 0;
+let jumbotronDebugChipEl = null;
 let footballSpriteSrc = '';
 let brokenGlassSpriteSrc = '';
 let sharehawkRafId = 0;
@@ -327,6 +329,16 @@ const CITY_GLINT_REGION = {
 };
 const CITY_SHIMMER_DEBUG = false;
 const DEBUG_JUMBOTRON = false;
+const DEBUG_STATS = (() => {
+  const queryEnabled = window.location.search.includes('debugStats=1');
+  if (queryEnabled) return true;
+  try {
+    return window.localStorage.getItem('debugStats') === '1';
+  } catch {
+    return false;
+  }
+})();
+const JUMBOTRON_STATS_POLL_MS = 12000;
 const FOOTBALL_SPRITE_CANDIDATES = [
   '/assets/football.png',
   '/assets/football%20sprite.png',
@@ -491,6 +503,88 @@ function formatSharehawksDisplay(value) {
   return `${digits.slice(0, 3)},${digits.slice(3)}`;
 }
 
+function statsDebugLog(message, context) {
+  if (!DEBUG_STATS) return;
+  if (typeof context === "undefined") {
+    console.log("[stats] " + message);
+    return;
+  }
+  console.log("[stats] " + message, context);
+}
+
+function parseParticipantsCountValue(value) {
+  if (value == null) return null;
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const numeric = Number(trimmed);
+    return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const parsed = parseParticipantsCountValue(item);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  if (typeof value === 'object') {
+    const entries = Object.entries(value);
+    const countEntry = entries.find(([key]) => /count/i.test(String(key)));
+    if (countEntry) {
+      const parsed = parseParticipantsCountValue(countEntry[1]);
+      if (parsed != null) return parsed;
+    }
+    for (const [, nested] of entries) {
+      const parsed = parseParticipantsCountValue(nested);
+      if (parsed != null) return parsed;
+    }
+  }
+
+  return null;
+}
+
+function ensureJumbotronDebugChip() {
+  if (!DEBUG_STATS || !JUMBOTRON_SCREEN) return null;
+  if (jumbotronDebugChipEl && jumbotronDebugChipEl.isConnected) return jumbotronDebugChipEl;
+
+  const chip = document.createElement('div');
+  chip.id = 'jumbotronDebugChip';
+  chip.setAttribute('aria-hidden', 'true');
+  Object.assign(chip.style, {
+    position: 'absolute',
+    left: '8px',
+    bottom: '8px',
+    zIndex: '7',
+    pointerEvents: 'none',
+    color: '#c7ffd7',
+    background: 'rgba(0, 0, 0, 0.74)',
+    border: '1px solid rgba(105, 190, 40, 0.45)',
+    padding: '2px 6px',
+    borderRadius: '2px',
+    fontFamily: 'Space Mono, IBM Plex Mono, monospace',
+    fontSize: '10px',
+    lineHeight: '1.2',
+    whiteSpace: 'nowrap'
+  });
+  JUMBOTRON_SCREEN.appendChild(chip);
+  jumbotronDebugChipEl = chip;
+  return jumbotronDebugChipEl;
+}
+
+function setJumbotronDebugChip(stats, source = 'unknown') {
+  if (!DEBUG_STATS) return;
+  const chip = ensureJumbotronDebugChip();
+  if (!chip) return;
+  const safe = toStats(stats);
+  chip.textContent = 'fetchedCount=' + safe.participantsCount + ' investment=' + formatCurrency(safe.equalShare) + ' source=' + source;
+}
 
 function fitTextToContainer(el) {
   if (!el) return;
@@ -648,6 +742,48 @@ function renderJumbotronStats(stats) {
     formatSharehawksDisplay(stats.participantsCount),
     stats.equalShare
   );
+}
+
+function updateJumbotronDisplay({ count, investment, animate = true, duration = 600, commitmentDuration = duration, onComplete } = {}) {
+  if (!JUMBOTRON_SHAREHOLDERS_VALUE || !JUMBOTRON_COMMITMENT_VALUE) {
+    statsDebugLog('jumbotron value nodes missing', {
+      hasSharehawksNode: !!JUMBOTRON_SHAREHOLDERS_VALUE,
+      hasCommitmentNode: !!JUMBOTRON_COMMITMENT_VALUE
+    });
+    return false;
+  }
+
+  const stats = toStats({ participantsCount: count, equalShare: investment });
+  const applyFinal = () => {
+    setJumbotronShareholdersDisplay(formatSharehawksDisplay(stats.participantsCount));
+    setJumbotronCommitmentDisplay(stats.equalShare);
+    if (JUMBOTRON_SHAREHOLDERS_VALUE) fitTextToContainer(JUMBOTRON_SHAREHOLDERS_VALUE);
+    if (JUMBOTRON_COMMITMENT_VALUE) fitTextToContainer(JUMBOTRON_COMMITMENT_VALUE);
+    scheduleJumbotronFit();
+  };
+
+  if (!animate) {
+    latestStats = stats;
+    renderAllStatTargets(stats);
+    applyFinal();
+    onComplete?.(stats);
+    return true;
+  }
+
+  try {
+    animateToStats(stats, duration, commitmentDuration, (finalStats) => {
+      applyFinal();
+      onComplete?.(finalStats || stats);
+    });
+    return true;
+  } catch (error) {
+    statsDebugLog('animateToStats failed; applying final jumbotron values', error);
+    latestStats = stats;
+    renderAllStatTargets(stats);
+    applyFinal();
+    onComplete?.(stats);
+    return false;
+  }
 }
 
 function initJumbotronCountdownTicker() {
@@ -1534,7 +1670,6 @@ function runFieldGoalLauncherPopOnce() {
 
 function maybeShowFootball() {
   const canShow = fieldGoalUnlocked
-    && !fieldGoalPlayed
     && isHomeScreenVisibleForFieldGoal();
   setFieldGoalLauncherVisible(canShow);
   if (canShow) {
@@ -1802,8 +1937,6 @@ function startFieldGoalGame() {
   if (isJumbotronOpen) closeJumbotronOverlay();
   if (receiptPreviewOpen) closeReceiptPreview(false);
   if (isSubscribeOpen) closeSubscribeWindow();
-
-  setFieldGoalPlayed(true, true);
   setFieldGoalGameActive(true);
   setFieldGoalLauncherVisible(false);
   setFieldGoalCounterDisplay(0);
@@ -2121,6 +2254,7 @@ function closeJumbotronInstantForTicketPreview() {
   isJumbotronAnimating = false;
   BODY.classList.remove('jumbotron-open', 'jumbotron-opening', 'jumbotron-closing', 'jumbotron-quiet-closing');
   JUMBOTRON_OVERLAY.setAttribute('aria-hidden', 'true');
+  stopJumbotronStatsPolling();
   resetSharehawkImpactState();
   if (DEBUG_JUMBOTRON) BODY.classList.remove('debug-jumbotron');
 }
@@ -3527,13 +3661,27 @@ async function triggerSharehawkCounterUpdate() {
     ticketCountersComplete = true;
     maybeFinalizeTicketUnlock();
   };
+  const hasSupabaseClient = !!initSupabaseClient();
   try {
     const supabaseStats = await insertGlobalParticipant();
     if (supabaseStats) {
+      statsDebugLog('sharehawk update resolved', { source: 'supabase', stats: supabaseStats });
       animateToStats(supabaseStats, 760, 1120, maybeUnlockTicket);
-      return;
+      if (isJumbotronOpen) {
+        refreshStatsAndRenderJumbotron('sharehawk-insert').catch((error) => {
+          statsDebugLog('post-insert jumbotron refresh failed', error);
+        });
+      }
+      return true;
     }
+    if (hasSupabaseClient) {
+      throw new Error('Supabase participant insert did not return stats.');
+    }
+  } catch (error) {
+    statsDebugLog('sharehawk update supabase failed', error);
+  }
 
+  try {
     const res = await fetch('/api/commitments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3542,12 +3690,27 @@ async function triggerSharehawkCounterUpdate() {
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error || 'Unable to record share-hawk.');
     if (data?.stats) {
+      statsDebugLog('sharehawk update resolved', { source: 'server', stats: data.stats });
       animateToStats(data.stats, 760, 1120, maybeUnlockTicket);
-      return;
+      if (isJumbotronOpen) {
+        refreshStatsAndRenderJumbotron('sharehawk-insert-server').catch((error) => {
+          statsDebugLog('post-insert server jumbotron refresh failed', error);
+        });
+      }
+      return true;
     }
-  } catch {
-    // Fallback keeps the interaction responsive if API call fails.
+  } catch (error) {
+    statsDebugLog('sharehawk update server fallback failed', error);
   }
+
+  if (hasSupabaseClient) {
+    showUiToast('Stats offline');
+    maybeUnlockTicket();
+    return false;
+  }
+
+  // Final local fallback keeps the interaction responsive only when remote
+  // stats backends are unavailable by configuration.
   const nextCount = base.participantsCount + 1;
   animateToStats(
     {
@@ -3558,6 +3721,8 @@ async function triggerSharehawkCounterUpdate() {
     1120,
     maybeUnlockTicket
   );
+  statsDebugLog('sharehawk update resolved', { source: 'local-fallback', participantsCount: nextCount });
+  return true;
 }
 
 async function runSharehawkImpact() {
@@ -3633,10 +3798,16 @@ async function runSharehawkImpact() {
     JUMBOTRON_PANEL.classList.add('jumbotronFlicker');
     window.setTimeout(async () => {
       JUMBOTRON_PANEL.classList.remove('jumbotronFlicker');
-      await triggerSharehawkCounterUpdate();
+      const updated = await triggerSharehawkCounterUpdate();
+      if (!updated) {
+        pendingTicketUnlock = false;
+        ticketCountersComplete = false;
+        persistSharehawkJoinedState(false);
+      } else {
+        sharehawkImpacted = true;
+      }
       sharehawkAnimating = false;
     }, 360);
-    sharehawkImpacted = true;
     return;
   }
 
@@ -3678,13 +3849,18 @@ async function runSharehawkImpact() {
     JUMBOTRON_PANEL.classList.remove('jumbotronOff');
     JUMBOTRON_PANEL.classList.add('jumbotronFlicker');
 
-    window.setTimeout(() => {
+    window.setTimeout(async () => {
       if (!JUMBOTRON_PANEL) return;
       JUMBOTRON_PANEL.classList.remove('jumbotronFlicker');
-      triggerSharehawkCounterUpdate().finally(() => {
-        sharehawkAnimating = false;
+      const updated = await triggerSharehawkCounterUpdate();
+      if (!updated) {
+        pendingTicketUnlock = false;
+        ticketCountersComplete = false;
+        persistSharehawkJoinedState(false);
+      } else {
         sharehawkImpacted = true;
-      });
+      }
+      sharehawkAnimating = false;
     }, 760);
   }
 
@@ -3805,7 +3981,10 @@ function openJumbotronOverlay() {
   isJumbotronOpen = true;
   JUMBOTRON_OVERLAY.setAttribute('aria-hidden', 'false');
   BODY.classList.add('jumbotron-open');
+  statsDebugLog("jumbotron opened", { isJumbotronOpen, isJumbotronAnimating });
   applyBrokenGlassIfNeeded();
+  refreshStatsAndRenderJumbotron("open");
+  startJumbotronStatsPolling();
   debugJumbotronSnapshot('after-open-class');
   setTimeout(() => {
     positionJumbotronCloseButton();
@@ -3847,6 +4026,7 @@ function openJumbotronOverlay() {
 
 function closeJumbotronOverlay() {
   if (!BODY || !isJumbotronOpen || isJumbotronAnimating) return;
+  stopJumbotronStatsPolling();
   if (!JUMBOTRON_OVERLAY) return;
   closeReceiptPreview(false);
   debugJumbotronSnapshot('before-close');
@@ -4274,11 +4454,13 @@ function initSupabaseClient() {
       console.warn('[stats] Supabase config missing. Running in local fallback mode.');
       supabaseWarnedMissingConfig = true;
     }
+    statsDebugLog("supabase init unavailable", { hasUrl: !!url, hasKey: !!key, hasCreateClient: !!createClient });
     return null;
   }
 
   if (!supabaseClient) {
     supabaseClient = createClient(url, key);
+    statsDebugLog("supabase client created", { url });
   }
   supabaseMode = true;
   return supabaseClient;
@@ -4296,9 +4478,18 @@ async function fetchGlobalParticipantsCount() {
   const client = initSupabaseClient();
   if (!client) return null;
 
+  statsDebugLog("fetch count start", { source: "supabase" });
   const rpcRes = await client.rpc('get_participant_count');
   if (!rpcRes.error && rpcRes.data != null) {
-    return Number(rpcRes.data || 0);
+    const rpcCount = parseParticipantsCountValue(rpcRes.data);
+    if (rpcCount != null) {
+      statsDebugLog("fetch count via rpc", { count: rpcCount });
+      return rpcCount;
+    }
+    statsDebugLog("fetch count rpc parse failed", { data: rpcRes.data });
+  }
+  if (rpcRes.error) {
+    statsDebugLog("fetch count rpc failed", rpcRes.error);
   }
 
   const { count, error } = await client
@@ -4306,14 +4497,24 @@ async function fetchGlobalParticipantsCount() {
     .select('id', { count: 'exact', head: true });
 
   if (error) throw error;
-  return Number(count || 0);
+  const tableCount = Number(count || 0);
+  statsDebugLog("fetch count via table", { count: tableCount });
+  return tableCount;
 }
 
-async function loadGlobalStatsFromSupabase(duration = 250) {
+async function loadGlobalStatsFromSupabase(duration = 250, reason = 'manual') {
   const count = await fetchGlobalParticipantsCount();
-  if (count == null) return false;
-  animateToStats(statsFromParticipantCount(count), duration);
-  return true;
+  if (count == null) return null;
+  const stats = statsFromParticipantCount(count);
+  updateJumbotronDisplay({
+    count: stats.participantsCount,
+    investment: stats.equalShare,
+    animate: true,
+    duration,
+    commitmentDuration: duration
+  });
+  setJumbotronDebugChip(stats, 'supabase:' + reason);
+  return stats;
 }
 
 async function insertGlobalParticipant() {
@@ -4321,15 +4522,21 @@ async function insertGlobalParticipant() {
   if (!client) return null;
 
   if (supabaseInsertInFlight) {
+    statsDebugLog("insert skipped; in flight");
     return null;
   }
 
   supabaseInsertInFlight = true;
+  statsDebugLog("insert participant start");
   try {
     const { error } = await client.from(SUPABASE_PARTICIPANTS_TABLE).insert({});
     if (error) throw error;
     const updatedCount = await fetchGlobalParticipantsCount();
+    statsDebugLog("insert participant success", { updatedCount });
     return statsFromParticipantCount(updatedCount);
+  } catch (error) {
+    statsDebugLog("insert participant failed", error);
+    throw error;
   } finally {
     supabaseInsertInFlight = false;
   }
@@ -4364,10 +4571,13 @@ function animateToStats(nextRaw, duration = 600, commitmentDuration = duration, 
   latestStats = next;
   animationToken += 1;
   const currentToken = animationToken;
+  statsDebugLog("animateToStats start", { from: prev, to: next, duration, commitmentDuration });
   let completed = 0;
   const maybeComplete = () => {
     completed += 1;
     if (completed < 2) return;
+    statsDebugLog("animateToStats complete", next);
+    statsDebugLog("jumbotron values updated", { sharehawks: formatSharehawksDisplay(next.participantsCount), commitment: formatCurrency(next.equalShare) });
     onComplete?.(next);
   };
 
@@ -4404,23 +4614,109 @@ function animateToStats(nextRaw, duration = 600, commitmentDuration = duration, 
   );
 }
 
-async function loadStats() {
-  if (await loadGlobalStatsFromSupabase(250)) {
-    return;
-  }
-
+async function loadStatsFromServerFallback(duration = 250, reason = 'manual') {
   try {
-    const res = await fetch('/api/stats');
-    if (!res.ok) throw new Error('Failed to load stats.');
-    const stats = await res.json();
-    animateToStats(stats, 250);
-  } catch {
-    // Static deploy fallback keeps UI functional without server endpoints.
-    animateToStats(statsFromParticipantCount(latestStats?.participantsCount || 0), 250);
+    const res = await fetch("/api/stats");
+    if (!res.ok) throw new Error("Failed to load stats.");
+    const rawStats = await res.json();
+    const stats = toStats(rawStats);
+    updateJumbotronDisplay({
+      count: stats.participantsCount,
+      investment: stats.equalShare,
+      animate: true,
+      duration,
+      commitmentDuration: duration
+    });
+    setJumbotronDebugChip(stats, 'server-fallback:' + reason);
+    statsDebugLog("server stats loaded", stats);
+    return stats;
+  } catch (error) {
+    statsDebugLog("server stats failed", error);
+    return null;
   }
 }
 
+async function refreshStatsNow(duration = 250, reason = "manual", toastOnFailure = false, toastOnFallback = false) {
+  statsDebugLog("refresh stats start", { reason, duration });
+
+  try {
+    const supabaseStats = await loadGlobalStatsFromSupabase(duration, reason);
+    if (supabaseStats) {
+      statsDebugLog("refresh stats resolved", { reason, source: "supabase", stats: supabaseStats });
+      return { ok: true, source: 'supabase', stats: supabaseStats, fallback: false };
+    }
+  } catch (error) {
+    statsDebugLog("supabase stats failed", error);
+  }
+
+  const serverStats = await loadStatsFromServerFallback(duration, reason);
+  if (serverStats) {
+    if (toastOnFallback) {
+      showUiToast("Stats offline");
+    }
+    statsDebugLog("refresh stats resolved", { reason, source: "server", stats: serverStats });
+    return { ok: true, source: 'server', stats: serverStats, fallback: true };
+  }
+
+  if (toastOnFailure) {
+    showUiToast("Stats offline");
+  }
+  statsDebugLog("refresh stats failed", { reason });
+  return { ok: false, source: 'none', stats: null, fallback: false };
+}
+
+async function runStatsHealthCheck() {
+  if (!DEBUG_STATS) return;
+  try {
+    const count = await fetchGlobalParticipantsCount();
+    const stats = statsFromParticipantCount(count);
+    setJumbotronDebugChip(stats, 'health-check');
+    statsDebugLog("health check ok", { participantsCount: count });
+  } catch (error) {
+    statsDebugLog("health check failed", error);
+    showUiToast("Stats offline");
+  }
+}
+
+async function refreshStatsAndRenderJumbotron(reason = "jumbotron") {
+  if (!isJumbotronOpen) return { ok: false, source: 'closed', stats: null, fallback: false };
+  return refreshStatsNow(420, reason, true, true);
+}
+
+async function refreshJumbotronStatsNow(reason = "jumbotron") {
+  return refreshStatsAndRenderJumbotron(reason);
+}
+
+function stopJumbotronStatsPolling() {
+  if (!jumbotronStatsPollTimerId) return;
+  clearInterval(jumbotronStatsPollTimerId);
+  jumbotronStatsPollTimerId = 0;
+  statsDebugLog("jumbotron poll stopped");
+}
+
+function startJumbotronStatsPolling() {
+  if (jumbotronStatsPollTimerId) return;
+  jumbotronStatsPollTimerId = window.setInterval(() => {
+    if (!isJumbotronOpen || isJumbotronAnimating) return;
+    refreshStatsAndRenderJumbotron("jumbotron-poll");
+  }, JUMBOTRON_STATS_POLL_MS);
+  statsDebugLog("jumbotron poll started", { intervalMs: JUMBOTRON_STATS_POLL_MS });
+}
+
+async function loadStats() {
+  const result = await refreshStatsNow(250, "init", false, false);
+  if (result?.ok) return;
+  // Static deploy fallback keeps UI functional without server endpoints.
+  const fallback = statsFromParticipantCount(latestStats?.participantsCount || 0);
+  updateJumbotronDisplay({
+    count: fallback.participantsCount,
+    investment: fallback.equalShare,
+    animate: false
+  });
+}
+
 function loadCounties() {
+  if (!COUNTY_SELECT) return;
   for (const county of COUNTIES) {
     const option = document.createElement('option');
     option.value = county;
@@ -4446,7 +4742,7 @@ function initRealtime() {
       },
       async () => {
         try {
-          await loadGlobalStatsFromSupabase(260);
+          await refreshStatsNow(260, "realtime", false);
         } catch {
           // Keep UI stable if realtime refresh fails intermittently.
         }
@@ -4455,43 +4751,45 @@ function initRealtime() {
     .subscribe();
 }
 
-FORM.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  FORM_MESSAGE.textContent = '';
+if (FORM) {
+  FORM.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (FORM_MESSAGE) FORM_MESSAGE.textContent = '';
 
-  try {
-    const supabaseStats = await insertGlobalParticipant();
-    if (supabaseStats) {
-      animateToStats(supabaseStats);
+    try {
+      const supabaseStats = await insertGlobalParticipant();
+      if (supabaseStats) {
+        animateToStats(supabaseStats);
+        FORM.reset();
+        if (FORM_MESSAGE) FORM_MESSAGE.textContent = 'Anonymous commitment recorded.';
+        return;
+      }
+
+      const payload = {
+        county: COUNTY_SELECT?.value || undefined
+      };
+
+      const res = await fetch('/api/commitments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to record commitment.');
+      }
+
       FORM.reset();
-      FORM_MESSAGE.textContent = 'Anonymous commitment recorded.';
-      return;
+      if (FORM_MESSAGE) FORM_MESSAGE.textContent = 'Anonymous commitment recorded.';
+      if (data.stats) {
+        animateToStats(data.stats);
+      }
+    } catch (err) {
+      if (FORM_MESSAGE) FORM_MESSAGE.textContent = err.message;
     }
-
-    const payload = {
-      county: COUNTY_SELECT.value || undefined
-    };
-
-    const res = await fetch('/api/commitments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || 'Unable to record commitment.');
-    }
-
-    FORM.reset();
-    FORM_MESSAGE.textContent = 'Anonymous commitment recorded.';
-    if (data.stats) {
-      animateToStats(data.stats);
-    }
-  } catch (err) {
-    FORM_MESSAGE.textContent = err.message;
-  }
-});
+  });
+}
 
 if (JUMP_TO_SIGNUP && JOIN_SECTION && COUNTY_SELECT) {
   JUMP_TO_SIGNUP.addEventListener('click', () => {
@@ -4543,13 +4841,36 @@ document.addEventListener('click', (event) => {
   runProposalReveal();
 });
 
+function handleRunNumbersActivation(source = 'click') {
+  statsDebugLog('run the numbers activated', {
+    source,
+    jumbotronOpen: isJumbotronOpen,
+    jumbotronAnimating: isJumbotronAnimating
+  });
+  markFieldGoalInteraction('numbers');
+  openJumbotronOverlay();
+}
+
 if (JOIN_COLLECTIVE_BTN) {
   JOIN_COLLECTIVE_BTN.addEventListener('click', (event) => {
     event.preventDefault();
-    markFieldGoalInteraction('numbers');
-    openJumbotronOverlay();
+    handleRunNumbersActivation('click');
+  });
+  JOIN_COLLECTIVE_BTN.addEventListener('pointerup', (event) => {
+    event.preventDefault();
+    handleRunNumbersActivation('pointerup');
+  });
+  JOIN_COLLECTIVE_BTN.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    handleRunNumbersActivation('keydown');
   });
 }
+
+window.__triggerRunNumbers = () => {
+  handleRunNumbersActivation('window');
+  return false;
+};
 
 if (SHARE_HAWK_BTN) {
   SHARE_HAWK_BTN.addEventListener('click', (event) => {
@@ -4791,10 +5112,14 @@ async function init() {
   loadCounties();
   renderStats({ participantsCount: 0, equalShare: PURCHASE_PRICE });
   await loadStats();
+  runStatsHealthCheck();
   initRealtime();
   maybeShowFootball();
 }
 
 init().catch((err) => {
-  FORM_MESSAGE.textContent = err.message;
+  console.error('[init] failed', err);
+  if (FORM_MESSAGE) {
+    FORM_MESSAGE.textContent = err.message;
+  }
 });

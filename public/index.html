@@ -224,16 +224,11 @@
                       <div class="subscribeOverlay__panel" role="dialog" aria-modal="true" aria-label="Subscribe for updates">
                         <h3 class="subscribeOverlay__title">Keep In Touch</h3>
                         <div class="subscribeOverlay__body">
-                          <p>
-                            We're <a class="subscribeOverlay__bodyLink" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">Extra Good Studio</a>, a creative collective. And we're serious about collectively buying the Seahawks.
-                          </p>
+                          <p>We're serious about collectively buying the Seahawks.</p>
                           <p>We just need a few hundred thousand friends to help us.</p>
                           <p>Join our mailing list if you want us to reach out to you when it's time to pay the bill.</p>
                           <p>We will never spam you, sell your info, or share it with anyone.</p>
                         </div>
-                        <a class="subscribeOverlay__logoLink subscribeOverlay__logoLink--signature" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">
-                          <img src="/assets/extragood-logo.png" alt="Extra Good Studio" class="subscribeOverlay__logo" />
-                        </a>
                         <div class="subscribeOverlay__screen">
                           <div id="kitSubscribeMount" class="subscribeOverlay__kitMount"></div>
                         </div>
@@ -296,19 +291,17 @@
                           Joining the Share-Hawks Collective does not obligate you to purchase anything. It signals interest in exploring a community bid.
                         </p>
                         <p class="proposal-body">
-                          Sharing your email is optional, but helpful if you want updates as this evolves. Also so we know how to reach you when the bill comes. We will use your email only for project-related communication.
+                          Sharing your email is optional, but also the only way we know how to reach you when the bill arrives. We will use your email only for project-related communication.
                         </p>
                         <p class="proposal-body">
                           This project is not affiliated with the Seattle Seahawks organization, the NFL, or the Paul Allen estate.
                         </p>
-                        <p class="proposal-body">
-                          It is an independent civic concept developed by
-                          <a class="proposal-link" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">Extra Good Studio</a>.
-                        </p>
+                        <p class="proposal-body">It is an independent civic art project developed by Hawks fan Abel Charrow. Please don't get your lawyers involved unless they're Hawks fans, too.</p>
                         <p class="proposal-body proposal-brand">
                           <a class="proposal-logoLink" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">
                             <img src="/assets/extragood-logo.png" alt="Extra Good Studio" class="proposal-logo" />
                           </a>
+                          <span class="proposal-credit">Web experience by <a class="proposal-link" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">Extra Good Studio</a>.</span>
                         </p>
                       </article>
                       <button id="proposalCloseBtn" class="uiClose" type="button" aria-label="Close proposal scroll">
@@ -396,6 +389,8 @@
     </main>
     <!-- /FUTURE_COPY_DO_NOT_DELETE -->
 
+    <div id="turnstileMount" aria-hidden="true" style="position: fixed; left: -9999px; top: -9999px; width: 1px; height: 1px; opacity: 0; pointer-events: none;"></div>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/config.js"></script>
     <script src="/app.js"></script>

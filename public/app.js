@@ -86,6 +86,7 @@ const FIELD_GOAL_CLOSE_BTN = document.getElementById('fieldGoalCloseBtn');
 const FIELD_GOAL_SCOREBOARD_STATUS = document.getElementById('fieldGoalScoreboardStatus');
 const FIELD_GOAL_COUNTER = document.getElementById('fieldGoalCounter');
 const UI_TOAST = document.getElementById('uiToast');
+const TURNSTILE_MOUNT = document.getElementById('turnstileMount');
 const ACTION_BUTTON_LABELS = Array.from(document.querySelectorAll('.uiOverlay__actions .uiBtn__label'));
 const BODY = document.body;
 
@@ -175,6 +176,8 @@ const PROPOSAL_SCROLL_OPEN_MS = 480;
 const JUMBOTRON_KICKOFF_TARGET = new Date('2026-09-10T17:15:00-07:00');
 const JUMBOTRON_COUNTDOWN_ENABLED = false;
 const SUPABASE_PARTICIPANTS_TABLE = 'participants';
+const SUPABASE_SHAREHAWK_FUNCTION = 'sharehawk';
+const TURNSTILE_TOKEN_TIMEOUT_MS = 12000;
 let latestStats = null;
 let animationToken = 0;
 let sceneInitialized = false;
@@ -280,6 +283,11 @@ let supabaseClient = null;
 let supabaseMode = false;
 let supabaseWarnedMissingConfig = false;
 let supabaseInsertInFlight = false;
+let turnstileWidgetId = null;
+let turnstileTokenRequest = null;
+let turnstileTokenResolve = null;
+let turnstileTokenReject = null;
+let turnstileTokenTimerId = 0;
 let fieldGoalUnlocked = false;
 let fieldGoalPlayed = false;
 let fieldGoalGameActive = false;
@@ -340,6 +348,12 @@ const DEBUG_STATS = (() => {
   }
 })();
 const JUMBOTRON_STATS_POLL_MS = 12000;
+const JUMBOTRON_INVESTMENT_OPEN_DURATION_THRESHOLD_MS = 650;
+const JUMBOTRON_INVESTMENT_OPEN_MIN_DURATION_MS = 900;
+const JUMBOTRON_INVESTMENT_OPEN_MAX_DURATION_MS = 1400;
+const JUMBOTRON_INVESTMENT_OPEN_DURATION_MULTIPLIER = 2.2;
+const JUMBOTRON_INVESTMENT_UPDATE_MIN_DURATION_MS = 700;
+const JUMBOTRON_INVESTMENT_UPDATE_MAX_DURATION_MS = 1100;
 const FOOTBALL_SPRITE_CANDIDATES = [
   '/assets/football.png',
   '/assets/football%20sprite.png',
@@ -379,7 +393,6 @@ const FIELD_GOAL_LED_MISS_DURATION_MS = 1000;
 const FIELD_GOAL_LED_SUCCESS_DURATION_MS = 1500;
 const FIELD_GOAL_INSTRUCTION_SEQUENCE = ["GRAB BALL", "PULL BACK", "SWIPE UP"];
 const FIELD_GOAL_INSTRUCTION_STEP_MS = 1000;
-const FIELD_GOAL_INSTRUCTION_CYCLES = 2;
 const FIELD_GOAL_POWER_RED_MAX = 0.30;
 const FIELD_GOAL_POWER_GREEN_MAX = 0.85;
 
@@ -2184,8 +2197,11 @@ function handleFieldGoalPointerCancel() {
   fieldGoalDragStartAt = 0;
   setFieldGoalBallHeld(false);
   setFieldGoalMeterActive(false);
+  clearFieldGoalInstructionTimer();
+  setLedMessage('');
   if (fieldGoalGameActive && !fieldGoalKickAnimating) {
     prepareFieldGoalBallForKick();
+    showFieldGoalInstructionEveryOpen();
   }
 }
 
@@ -3686,7 +3702,6 @@ async function triggerSharehawkCounterUpdate() {
     ticketCountersComplete = true;
     maybeFinalizeTicketUnlock();
   };
-  const hasSupabaseClient = !!initSupabaseClient();
   try {
     const supabaseStats = await insertGlobalParticipant();
     if (supabaseStats) {
@@ -3698,9 +3713,6 @@ async function triggerSharehawkCounterUpdate() {
         });
       }
       return true;
-    }
-    if (hasSupabaseClient) {
-      throw new Error('Supabase participant insert did not return stats.');
     }
   } catch (error) {
     statsDebugLog('sharehawk update supabase failed', error);
@@ -3728,14 +3740,8 @@ async function triggerSharehawkCounterUpdate() {
     statsDebugLog('sharehawk update server fallback failed', error);
   }
 
-  if (hasSupabaseClient) {
-    showUiToast('Stats offline');
-    maybeUnlockTicket();
-    return false;
-  }
-
-  // Final local fallback keeps the interaction responsive only when remote
-  // stats backends are unavailable by configuration.
+  // Final local fallback keeps the interaction responsive even if remote
+  // stats sync is temporarily unavailable.
   const nextCount = base.participantsCount + 1;
   animateToStats(
     {
@@ -3825,12 +3831,11 @@ async function runSharehawkImpact() {
       JUMBOTRON_PANEL.classList.remove('jumbotronFlicker');
       const updated = await triggerSharehawkCounterUpdate();
       if (!updated) {
-        pendingTicketUnlock = false;
-        ticketCountersComplete = false;
-        persistSharehawkJoinedState(false);
-      } else {
-        sharehawkImpacted = true;
+        statsDebugLog('sharehawk update failed; continuing ticket flow');
+        ticketCountersComplete = true;
+        maybeFinalizeTicketUnlock();
       }
+      sharehawkImpacted = true;
       sharehawkAnimating = false;
     }, 360);
     return;
@@ -3879,12 +3884,11 @@ async function runSharehawkImpact() {
       JUMBOTRON_PANEL.classList.remove('jumbotronFlicker');
       const updated = await triggerSharehawkCounterUpdate();
       if (!updated) {
-        pendingTicketUnlock = false;
-        ticketCountersComplete = false;
-        persistSharehawkJoinedState(false);
-      } else {
-        sharehawkImpacted = true;
+        statsDebugLog('sharehawk update failed; continuing ticket flow');
+        ticketCountersComplete = true;
+        maybeFinalizeTicketUnlock();
       }
+      sharehawkImpacted = true;
       sharehawkAnimating = false;
     }, 760);
   }
@@ -4469,6 +4473,126 @@ function getSupabaseCredentials() {
   };
 }
 
+function getTurnstileSiteKey() {
+  const runtimeSiteKey = (window.__TURNSTILE_SITE_KEY || '').trim();
+  const bodySiteKey = (document.body?.dataset?.turnstileSiteKey || '').trim();
+  return runtimeSiteKey || bodySiteKey;
+}
+
+function getSharehawkFunctionUrl() {
+  const { url } = getSupabaseCredentials();
+  if (!url) return '';
+  return `${url}/functions/v1/${SUPABASE_SHAREHAWK_FUNCTION}`;
+}
+
+function clearTurnstileTokenPromise() {
+  if (turnstileTokenTimerId) {
+    clearTimeout(turnstileTokenTimerId);
+    turnstileTokenTimerId = 0;
+  }
+  turnstileTokenRequest = null;
+  turnstileTokenResolve = null;
+  turnstileTokenReject = null;
+}
+
+function resolveTurnstileToken(token) {
+  if (!turnstileTokenResolve) return;
+  const resolve = turnstileTokenResolve;
+  clearTurnstileTokenPromise();
+  resolve(token);
+}
+
+function rejectTurnstileToken(error) {
+  if (!turnstileTokenReject) return;
+  const reject = turnstileTokenReject;
+  clearTurnstileTokenPromise();
+  reject(error instanceof Error ? error : new Error(String(error || 'Turnstile verification failed.')));
+}
+
+function ensureTurnstileWidget() {
+  if (turnstileWidgetId !== null) {
+    return turnstileWidgetId;
+  }
+
+  const siteKey = getTurnstileSiteKey();
+  if (!siteKey || !TURNSTILE_MOUNT || !window.turnstile?.render) {
+    return null;
+  }
+
+  turnstileWidgetId = window.turnstile.render(TURNSTILE_MOUNT, {
+    sitekey: siteKey,
+    size: 'invisible',
+    appearance: 'interaction-only',
+    action: 'sharehawk_insert',
+    callback: (token) => {
+      statsDebugLog('turnstile token received');
+      resolveTurnstileToken(token);
+    },
+    'error-callback': () => {
+      statsDebugLog('turnstile token error');
+      rejectTurnstileToken(new Error('Turnstile verification failed.'));
+    },
+    'expired-callback': () => {
+      statsDebugLog('turnstile token expired');
+      rejectTurnstileToken(new Error('Turnstile token expired.'));
+    },
+    'timeout-callback': () => {
+      statsDebugLog('turnstile token timeout');
+      rejectTurnstileToken(new Error('Turnstile timed out.'));
+    }
+  });
+
+  return turnstileWidgetId;
+}
+
+async function waitForTurnstileApi(maxWaitMs = 8000) {
+  if (window.turnstile?.render) return;
+
+  const start = performance.now();
+  while ((performance.now() - start) < maxWaitMs) {
+    await wait(100);
+    if (window.turnstile?.render) {
+      return;
+    }
+  }
+
+  throw new Error('Turnstile unavailable.');
+}
+
+async function getTurnstileToken() {
+  const siteKey = getTurnstileSiteKey();
+  if (!siteKey) {
+    throw new Error('Turnstile site key missing.');
+  }
+
+  await waitForTurnstileApi();
+  const widgetId = ensureTurnstileWidget();
+  if (widgetId === null || widgetId === undefined) {
+    throw new Error('Turnstile unavailable.');
+  }
+
+  if (turnstileTokenRequest) {
+    return turnstileTokenRequest;
+  }
+
+  turnstileTokenRequest = new Promise((resolve, reject) => {
+    turnstileTokenResolve = resolve;
+    turnstileTokenReject = reject;
+    turnstileTokenTimerId = window.setTimeout(() => {
+      rejectTurnstileToken(new Error('Turnstile verification timed out.'));
+    }, TURNSTILE_TOKEN_TIMEOUT_MS);
+
+    try {
+      window.turnstile.reset(widgetId);
+      window.turnstile.execute(widgetId);
+    } catch (error) {
+      rejectTurnstileToken(error);
+    }
+  });
+
+  return turnstileTokenRequest;
+}
+
 function initSupabaseClient() {
   const { url, key } = getSupabaseCredentials();
   const createClient = window.supabase?.createClient;
@@ -4551,12 +4675,37 @@ async function insertGlobalParticipant() {
     return null;
   }
 
+  const { key } = getSupabaseCredentials();
+  const functionUrl = getSharehawkFunctionUrl();
+  if (!key || !functionUrl) {
+    throw new Error('Share-hawk endpoint unavailable.');
+  }
+
   supabaseInsertInFlight = true;
   statsDebugLog("insert participant start");
   try {
-    const { error } = await client.from(SUPABASE_PARTICIPANTS_TABLE).insert({});
-    if (error) throw error;
-    const updatedCount = await fetchGlobalParticipantsCount();
+    const token = await getTurnstileToken();
+
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: key,
+        Authorization: `Bearer ${key}`
+      },
+      body: JSON.stringify({ token })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error || 'Unable to record share-hawk.');
+    }
+
+    let updatedCount = parseParticipantsCountValue(payload?.count);
+    if (updatedCount == null) {
+      updatedCount = await fetchGlobalParticipantsCount();
+    }
+
     statsDebugLog("insert participant success", { updatedCount });
     return statsFromParticipantCount(updatedCount);
   } catch (error) {
@@ -4564,6 +4713,7 @@ async function insertGlobalParticipant() {
     throw error;
   } finally {
     supabaseInsertInFlight = false;
+    clearTurnstileTokenPromise();
   }
 }
 
@@ -4590,13 +4740,80 @@ function animateNumber(from, to, duration, onFrame, done) {
   requestAnimationFrame(tick);
 }
 
+function getInvestmentAnimationDuration(duration, commitmentDuration) {
+  const requested = Math.max(
+    1,
+    Math.round(Number.isFinite(commitmentDuration) ? commitmentDuration : duration)
+  );
+
+  if (requested <= JUMBOTRON_INVESTMENT_OPEN_DURATION_THRESHOLD_MS) {
+    return clamp(
+      Math.round(requested * JUMBOTRON_INVESTMENT_OPEN_DURATION_MULTIPLIER),
+      JUMBOTRON_INVESTMENT_OPEN_MIN_DURATION_MS,
+      JUMBOTRON_INVESTMENT_OPEN_MAX_DURATION_MS
+    );
+  }
+
+  return clamp(
+    requested,
+    JUMBOTRON_INVESTMENT_UPDATE_MIN_DURATION_MS,
+    JUMBOTRON_INVESTMENT_UPDATE_MAX_DURATION_MS
+  );
+}
+
+function getInvestmentQuantizeStep(remainingDelta) {
+  const absDelta = Math.abs(Number(remainingDelta) || 0);
+  if (absDelta >= 50_000_000) return 1_000_000;
+  if (absDelta >= 5_000_000) return 100_000;
+  if (absDelta >= 500_000) return 10_000;
+  if (absDelta >= 50_000) return 1_000;
+  if (absDelta >= 5_000) return 100;
+  return 1;
+}
+
+function quantizeInvestmentFrameValue(value, from, to) {
+  const direction = to >= from ? 1 : -1;
+  const remaining = Math.abs(to - value);
+  const step = getInvestmentQuantizeStep(remaining);
+  if (step <= 1) {
+    return Math.round(value);
+  }
+
+  let snapped;
+  if (direction > 0) {
+    snapped = Math.floor(value / step) * step;
+    snapped = Math.max(from, snapped);
+    snapped = Math.min(to, snapped);
+  } else {
+    snapped = Math.ceil(value / step) * step;
+    snapped = Math.min(from, snapped);
+    snapped = Math.max(to, snapped);
+  }
+
+  return Math.round(snapped);
+}
+
 function animateToStats(nextRaw, duration = 600, commitmentDuration = duration, onComplete) {
   const next = toStats(nextRaw);
   const prev = latestStats || next;
   latestStats = next;
   animationToken += 1;
   const currentToken = animationToken;
-  statsDebugLog("animateToStats start", { from: prev, to: next, duration, commitmentDuration });
+
+  const previousParticipants = Math.round(prev.participantsCount);
+  const nextParticipants = Math.round(next.participantsCount);
+  const previousInvestment = Math.round(prev.equalShare);
+  const nextInvestment = Math.round(next.equalShare);
+  const pacedCommitmentDuration = getInvestmentAnimationDuration(duration, commitmentDuration);
+
+  statsDebugLog("animateToStats start", {
+    from: prev,
+    to: next,
+    duration,
+    commitmentDuration,
+    pacedCommitmentDuration
+  });
+
   let completed = 0;
   const maybeComplete = () => {
     completed += 1;
@@ -4607,8 +4824,8 @@ function animateToStats(nextRaw, duration = 600, commitmentDuration = duration, 
   };
 
   animateNumber(
-    prev.participantsCount,
-    next.participantsCount,
+    previousParticipants,
+    nextParticipants,
     duration,
     (value) => {
       if (currentToken !== animationToken) return;
@@ -4623,19 +4840,28 @@ function animateToStats(nextRaw, duration = 600, commitmentDuration = duration, 
   );
 
   animateNumber(
-    prev.equalShare,
-    next.equalShare,
-    commitmentDuration,
+    previousInvestment,
+    nextInvestment,
+    pacedCommitmentDuration,
     (value) => {
       if (currentToken !== animationToken) return;
-      const rounded = Math.round(value);
-      const text = formatCommitment(rounded);
+      const quantized = quantizeInvestmentFrameValue(value, previousInvestment, nextInvestment);
+      const text = formatCommitment(quantized);
       if (EQUAL_SHARE_EL) EQUAL_SHARE_EL.textContent = text;
       if (JOIN_EQUAL_SHARE_EL) JOIN_EQUAL_SHARE_EL.textContent = text;
-      setJumbotronCommitmentDisplay(rounded);
+      setJumbotronCommitmentDisplay(quantized);
       scheduleJumbotronFit();
     },
-    maybeComplete
+    () => {
+      if (currentToken !== animationToken) return;
+      const finalValue = Math.round(next.equalShare);
+      const finalText = formatCommitment(finalValue);
+      if (EQUAL_SHARE_EL) EQUAL_SHARE_EL.textContent = finalText;
+      if (JOIN_EQUAL_SHARE_EL) JOIN_EQUAL_SHARE_EL.textContent = finalText;
+      setJumbotronCommitmentDisplay(finalValue);
+      scheduleJumbotronFit();
+      maybeComplete();
+    }
   );
 }
 

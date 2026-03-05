@@ -747,6 +747,17 @@ body.ui-btn-labels-stacked .uiBtn__label {
   height: auto;
 }
 
+.proposal-credit {
+  display: block;
+  margin-top: clamp(6px, calc(10px * var(--ui-scale)), 12px);
+  color: #263c92;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-size: clamp(8px, calc(13px * var(--ui-scale)), 14px);
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: right;
+}
+
 .proposal-link {
   color: #108040;
   font-weight: 700;

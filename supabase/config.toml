@@ -1,0 +1,4 @@
+project_id = "sugirphcfptqnzpxvrqm"
+
+[functions.sharehawk]
+verify_jwt = false

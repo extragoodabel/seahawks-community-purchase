@@ -86,6 +86,8 @@ const FIELD_GOAL_CLOSE_BTN = document.getElementById('fieldGoalCloseBtn');
 const FIELD_GOAL_SCOREBOARD_STATUS = document.getElementById('fieldGoalScoreboardStatus');
 const FIELD_GOAL_COUNTER = document.getElementById('fieldGoalCounter');
 const UI_TOAST = document.getElementById('uiToast');
+const BOOT_LOADER = document.getElementById('bootLoader');
+const BOOT_LOADER_SPINNER = document.getElementById('bootLoaderSpinner');
 const TURNSTILE_MOUNT = document.getElementById('turnstileMount');
 const ACTION_BUTTON_LABELS = Array.from(document.querySelectorAll('.uiOverlay__actions .uiBtn__label'));
 const BODY = document.body;
@@ -180,6 +182,7 @@ const SUPABASE_SHAREHAWK_FUNCTION = 'sharehawk';
 const TURNSTILE_TOKEN_TIMEOUT_MS = 12000;
 let latestStats = null;
 let animationToken = 0;
+let maxRenderedParticipantsCount = 0;
 let sceneInitialized = false;
 let parallaxEnabled = false;
 let parallaxRaf = 0;
@@ -288,6 +291,20 @@ let turnstileTokenRequest = null;
 let turnstileTokenResolve = null;
 let turnstileTokenReject = null;
 let turnstileTokenTimerId = 0;
+let sharehawkTapHandledAt = 0;
+let sharehawkAssetsWarmupStarted = false;
+let perfDomReadyAt = 0;
+let perfInitIdleAt = 0;
+let perfSharehawkTapAt = 0;
+let perfLongTaskObserver = null;
+let bootLoaderShowTimerId = 0;
+let bootLoaderHardCapTimerId = 0;
+let bootLoaderShown = false;
+let bootLoaderVisible = false;
+let bootPreloadCompleted = false;
+let bootInteractiveReady = false;
+let bootPreloadStartedAt = 0;
+let bootPreloadPromise = null;
 let fieldGoalUnlocked = false;
 let fieldGoalPlayed = false;
 let fieldGoalGameActive = false;
@@ -347,6 +364,15 @@ const DEBUG_STATS = (() => {
     return false;
   }
 })();
+const DEBUG_PERF = (() => {
+  const queryEnabled = window.location.search.includes('debugPerf=1');
+  if (queryEnabled) return true;
+  try {
+    return window.localStorage.getItem('debugPerf') === '1';
+  } catch {
+    return false;
+  }
+})();
 const JUMBOTRON_STATS_POLL_MS = 12000;
 const JUMBOTRON_INVESTMENT_OPEN_DURATION_THRESHOLD_MS = 650;
 const JUMBOTRON_INVESTMENT_OPEN_MIN_DURATION_MS = 900;
@@ -395,6 +421,14 @@ const FIELD_GOAL_INSTRUCTION_SEQUENCE = ["GRAB BALL", "PULL BACK", "SWIPE UP"];
 const FIELD_GOAL_INSTRUCTION_STEP_MS = 1000;
 const FIELD_GOAL_POWER_RED_MAX = 0.30;
 const FIELD_GOAL_POWER_GREEN_MAX = 0.85;
+const BOOT_LOADER_SHOW_DELAY_MS = 500;
+const BOOT_LOADER_HARD_CAP_MS = 4000;
+const BOOT_PRELOAD_IMAGE_URLS = [
+  '/assets/football.png',
+  '/assets/broken-glass.png',
+  '/assets/ticket-template.png',
+  '/assets/jumbotron-frame.png'
+];
 
 // Hawk spawn slots are defined as "between layers" by mounting the sprite
 // inside the lower layer host. This keeps it visually between layer stacks.
@@ -526,6 +560,221 @@ function statsDebugLog(message, context) {
     return;
   }
   console.log("[stats] " + message, context);
+}
+
+function perfLog(event, details) {
+  if (!DEBUG_PERF) return;
+  if (typeof details === 'undefined') {
+    console.log('[perf] ' + event);
+    return;
+  }
+  console.log('[perf] ' + event, details);
+}
+
+function initializePerfDomReadyMark() {
+  if (!DEBUG_PERF) return;
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      perfDomReadyAt = performance.now();
+      perfLog('domContentLoaded', { atMs: Math.round(perfDomReadyAt) });
+    }, { once: true });
+    return;
+  }
+  perfDomReadyAt = performance.now();
+  perfLog('domReady', { atMs: Math.round(perfDomReadyAt) });
+}
+
+function initPerfLongTaskObserver() {
+  if (!DEBUG_PERF || perfLongTaskObserver || typeof PerformanceObserver === 'undefined') return;
+  try {
+    perfLongTaskObserver = new PerformanceObserver((list) => {
+      const entries = list.getEntries();
+      for (const entry of entries) {
+        const sample = {
+          start: entry.startTime,
+          duration: entry.duration
+        };
+        perfLongTasks.push(sample);
+        if (perfLongTasks.length > 120) {
+          perfLongTasks.splice(0, perfLongTasks.length - 120);
+        }
+        if (perfSharehawkTapAt > 0 && entry.startTime >= (perfSharehawkTapAt - 50) && entry.startTime <= (perfSharehawkTapAt + 3000)) {
+          perfLog('longtask around sharehawk tap', {
+            startMs: Math.round(entry.startTime),
+            durationMs: Math.round(entry.duration)
+          });
+        }
+      }
+    });
+    perfLongTaskObserver.observe({ entryTypes: ['longtask'] });
+  } catch {
+    // no-op
+  }
+}
+
+function runWhenIdle(task, timeout = 2000) {
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(() => task(), { timeout });
+    return;
+  }
+  window.setTimeout(task, Math.min(900, timeout));
+}
+
+function markSharehawkTap(source = 'unknown') {
+  if (!DEBUG_PERF) return;
+  perfSharehawkTapAt = performance.now();
+  perfLog('sharehawk tap', {
+    source,
+    atMs: Math.round(perfSharehawkTapAt)
+  });
+}
+
+async function prewarmSharehawkAssets() {
+  if (sharehawkAssetsWarmupStarted) return;
+  sharehawkAssetsWarmupStarted = true;
+  runWhenIdle(async () => {
+    const start = performance.now();
+    try {
+      await ensureSharehawkAssets();
+      const candidates = [footballSpriteSrc || FOOTBALL_SPRITE_CANDIDATES[0], brokenGlassSpriteSrc || BROKEN_GLASS_SPRITE_CANDIDATES[0]];
+      await Promise.all(candidates.filter(Boolean).map((src) => {
+        const img = new Image();
+        img.src = src;
+        if (typeof img.decode === 'function') {
+          return img.decode().catch(() => undefined);
+        }
+        return Promise.resolve();
+      }));
+      perfLog('sharehawk assets prewarmed', {
+        durationMs: Math.round(performance.now() - start),
+        footballSrc: footballSpriteSrc || FOOTBALL_SPRITE_CANDIDATES[0],
+        glassSrc: brokenGlassSpriteSrc || BROKEN_GLASS_SPRITE_CANDIDATES[0]
+      });
+    } catch (error) {
+      perfLog('sharehawk assets prewarm failed', {
+        durationMs: Math.round(performance.now() - start),
+        error: String(error?.message || error)
+      });
+    }
+  });
+}
+
+function setBootLoaderVisible(visible) {
+  if (!BOOT_LOADER || bootLoaderVisible === visible) return;
+  bootLoaderVisible = visible;
+  BOOT_LOADER.classList.toggle('bootLoader--on', visible);
+  BOOT_LOADER.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  if (visible) {
+    bootLoaderShown = true;
+  }
+}
+
+function clearBootLoaderTimers() {
+  if (bootLoaderShowTimerId) {
+    window.clearTimeout(bootLoaderShowTimerId);
+    bootLoaderShowTimerId = 0;
+  }
+  if (bootLoaderHardCapTimerId) {
+    window.clearTimeout(bootLoaderHardCapTimerId);
+    bootLoaderHardCapTimerId = 0;
+  }
+}
+
+function hideBootLoader(reason = 'ready') {
+  setBootLoaderVisible(false);
+  if (DEBUG_PERF) {
+    perfLog('boot loader hidden', { reason, loaderDisplayed: bootLoaderShown });
+  }
+}
+
+function getBootPreloadImageUrls() {
+  const spinnerSrc = BOOT_LOADER_SPINNER?.getAttribute('src') || '';
+  return Array.from(new Set([
+    ...BOOT_PRELOAD_IMAGE_URLS,
+    spinnerSrc,
+    FOOTBALL_SPRITE_CANDIDATES[0],
+    BROKEN_GLASS_SPRITE_CANDIDATES[0]
+  ].filter(Boolean)));
+}
+
+function decodeBootImage(url) {
+  return new Promise((resolve) => {
+    if (!url) {
+      resolve({ url, ok: false });
+      return;
+    }
+
+    const img = new Image();
+    img.decoding = 'async';
+    let settled = false;
+
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      resolve({ url, ok });
+    };
+
+    img.onload = () => finish(true);
+    img.onerror = () => finish(false);
+    img.src = url;
+
+    if (typeof img.decode === 'function') {
+      img.decode().then(() => finish(true)).catch(() => {
+        // Keep onload/onerror fallback.
+      });
+    }
+  });
+}
+
+function startBootPreload() {
+  if (bootPreloadPromise) return bootPreloadPromise;
+
+  const urls = getBootPreloadImageUrls();
+  bootPreloadStartedAt = performance.now();
+  perfLog('boot preload start', {
+    assetCount: urls.length,
+    assets: urls
+  });
+
+  bootLoaderShowTimerId = window.setTimeout(() => {
+    if (bootPreloadCompleted || bootInteractiveReady) return;
+    setBootLoaderVisible(true);
+    perfLog('boot loader shown', { delayMs: BOOT_LOADER_SHOW_DELAY_MS });
+  }, BOOT_LOADER_SHOW_DELAY_MS);
+
+  bootLoaderHardCapTimerId = window.setTimeout(() => {
+    hideBootLoader('hard-cap');
+  }, BOOT_LOADER_HARD_CAP_MS);
+
+  bootPreloadPromise = Promise.all(urls.map((url) => decodeBootImage(url)))
+    .then((results) => {
+      bootPreloadCompleted = true;
+      clearBootLoaderTimers();
+      const failedUrls = results.filter((item) => !item.ok).map((item) => item.url);
+      const durationMs = Math.round(performance.now() - bootPreloadStartedAt);
+      perfLog('boot preload end', {
+        durationMs,
+        loaderDisplayed: bootLoaderShown,
+        failedCount: failedUrls.length
+      });
+      if (failedUrls.length) {
+        perfLog('boot preload failed assets', { urls: failedUrls });
+      }
+      hideBootLoader('assets-ready');
+      return results;
+    })
+    .catch((error) => {
+      bootPreloadCompleted = true;
+      clearBootLoaderTimers();
+      perfLog('boot preload failed', {
+        durationMs: Math.round(performance.now() - bootPreloadStartedAt),
+        error: String(error?.message || error)
+      });
+      hideBootLoader('assets-error');
+      return [];
+    });
+
+  return bootPreloadPromise;
 }
 
 function parseParticipantsCountValue(value) {
@@ -776,7 +1025,8 @@ function updateJumbotronDisplay({ count, investment, animate = true, duration = 
     return false;
   }
 
-  const stats = toStats({ participantsCount: count, equalShare: investment });
+  const stats = applyMonotonicStatsGuard({ participantsCount: count, equalShare: investment });
+  markRenderedParticipantsCount(stats.participantsCount);
   const applyFinal = () => {
     setJumbotronShareholdersDisplay(formatSharehawksDisplay(stats.participantsCount));
     setJumbotronCommitmentDisplay(stats.equalShare);
@@ -814,19 +1064,21 @@ function initJumbotronCountdownTicker() {
 }
 
 function renderAllStatTargets(stats) {
+  const safeStats = applyMonotonicStatsGuard(stats);
+  markRenderedParticipantsCount(safeStats.participantsCount);
   if (PARTICIPANTS_COUNT_EL) {
-    PARTICIPANTS_COUNT_EL.textContent = formatShareholders(stats.participantsCount);
+    PARTICIPANTS_COUNT_EL.textContent = formatShareholders(safeStats.participantsCount);
   }
   if (EQUAL_SHARE_EL) {
-    EQUAL_SHARE_EL.textContent = formatCommitment(stats.equalShare);
+    EQUAL_SHARE_EL.textContent = formatCommitment(safeStats.equalShare);
   }
   if (JOIN_PARTICIPANTS_COUNT_EL) {
-    JOIN_PARTICIPANTS_COUNT_EL.textContent = formatShareholders(stats.participantsCount);
+    JOIN_PARTICIPANTS_COUNT_EL.textContent = formatShareholders(safeStats.participantsCount);
   }
   if (JOIN_EQUAL_SHARE_EL) {
-    JOIN_EQUAL_SHARE_EL.textContent = formatCommitment(stats.equalShare);
+    JOIN_EQUAL_SHARE_EL.textContent = formatCommitment(safeStats.equalShare);
   }
-  renderJumbotronStats(stats);
+  renderJumbotronStats(safeStats);
 }
 
 function waitForImage(img) {
@@ -3696,6 +3948,7 @@ function updateBrokenGlassLayout() {
 }
 
 async function triggerSharehawkCounterUpdate() {
+  const perfStart = performance.now();
   const base = latestStats || { participantsCount: 0, equalShare: PURCHASE_PRICE };
   const maybeUnlockTicket = () => {
     if (!pendingTicketUnlock) return;
@@ -3712,32 +3965,11 @@ async function triggerSharehawkCounterUpdate() {
           statsDebugLog('post-insert jumbotron refresh failed', error);
         });
       }
+      perfLog('sharehawk counter update', { source: 'supabase', durationMs: Math.round(performance.now() - perfStart) });
       return true;
     }
   } catch (error) {
     statsDebugLog('sharehawk update supabase failed', error);
-  }
-
-  try {
-    const res = await fetch('/api/commitments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ county: '' })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || 'Unable to record share-hawk.');
-    if (data?.stats) {
-      statsDebugLog('sharehawk update resolved', { source: 'server', stats: data.stats });
-      animateToStats(data.stats, 760, 1120, maybeUnlockTicket);
-      if (isJumbotronOpen) {
-        refreshStatsAndRenderJumbotron('sharehawk-insert-server').catch((error) => {
-          statsDebugLog('post-insert server jumbotron refresh failed', error);
-        });
-      }
-      return true;
-    }
-  } catch (error) {
-    statsDebugLog('sharehawk update server fallback failed', error);
   }
 
   // Final local fallback keeps the interaction responsive even if remote
@@ -3753,10 +3985,11 @@ async function triggerSharehawkCounterUpdate() {
     maybeUnlockTicket
   );
   statsDebugLog('sharehawk update resolved', { source: 'local-fallback', participantsCount: nextCount });
+  perfLog('sharehawk counter update', { source: 'local', durationMs: Math.round(performance.now() - perfStart) });
   return true;
 }
 
-async function runSharehawkImpact() {
+async function runSharehawkImpact(source = 'unknown') {
   if (sharehawkAnimating || sharehawkJoined || !BODY?.classList.contains('jumbotron-open')) return;
   if (!STADIUM_FRAME_MASK || !JUMBOTRON_PANEL || !JUMBOTRON_CONTENT || !JUMBOTRON_IMPACT_SPRITE || !JUMBOTRON_GLASS_SPRITE) return;
   if (!SHARE_HAWK_BTN) return;
@@ -3772,13 +4005,22 @@ async function runSharehawkImpact() {
   persistSharehawkJoinedState(true);
   pendingTicketUnlock = true;
   ticketCountersComplete = false;
-  await ensureSharehawkAssets();
-  if (!footballSpriteSrc || !brokenGlassSpriteSrc) {
+
+  // Do not block launch on asset resolution; prewarm runs in background.
+  ensureSharehawkAssets().catch((error) => {
+    perfLog('sharehawk assets ensure failed', { error: String(error?.message || error) });
+  });
+
+  const footballSrc = footballSpriteSrc || FOOTBALL_SPRITE_CANDIDATES[0] || '';
+  const glassSrc = brokenGlassSpriteSrc || BROKEN_GLASS_SPRITE_CANDIDATES[0] || '';
+  if (!footballSrc || !glassSrc) {
     sharehawkAnimating = false;
     pendingTicketUnlock = false;
     if (SHARE_HAWK_BTN) SHARE_HAWK_BTN.disabled = false;
     return;
   }
+  footballSpriteSrc = footballSrc;
+  brokenGlassSpriteSrc = glassSrc;
 
   const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
   const screenRect = JUMBOTRON_CONTENT.getBoundingClientRect();
@@ -3804,10 +4046,22 @@ async function runSharehawkImpact() {
   const footballEndH = footballEndW * 0.62;
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  JUMBOTRON_IMPACT_SPRITE.src = footballSpriteSrc;
+  JUMBOTRON_IMPACT_SPRITE.src = footballSrc;
   JUMBOTRON_IMPACT_SPRITE.style.opacity = '1';
   JUMBOTRON_IMPACT_SPRITE.style.width = `${footballStartW.toFixed(2)}px`;
   JUMBOTRON_GLASS_SPRITE.style.opacity = '0';
+
+  if (DEBUG_PERF) {
+    const launchAt = performance.now();
+    const tapToLaunchMs = perfSharehawkTapAt > 0 ? Math.round(launchAt - perfSharehawkTapAt) : null;
+    const longTasksNearTap = perfLongTasks
+      .filter((task) => perfSharehawkTapAt > 0 && task.start >= (perfSharehawkTapAt - 60) && task.start <= (launchAt + 400))
+      .map((task) => ({ startMs: Math.round(task.start), durationMs: Math.round(task.duration) }));
+    console.groupCollapsed(`[perf] sharehawk launch (${source})`);
+    console.log('tapToLaunchMs', tapToLaunchMs);
+    console.log('longTasksNearTap', longTasksNearTap);
+    console.groupEnd();
+  }
 
   const startTime = performance.now();
   if (reduceMotion) {
@@ -3822,7 +4076,7 @@ async function runSharehawkImpact() {
       screenNY: clamp((impactClientY - lockScreenRect.top) / lockScreenRect.height, 0, 1)
     };
     setJumbotronBroken(brokenGlassLock);
-    JUMBOTRON_GLASS_SPRITE.src = brokenGlassSpriteSrc;
+    JUMBOTRON_GLASS_SPRITE.src = glassSrc;
     updateBrokenGlassLayout();
     triggerCelebrationFX();
     JUMBOTRON_IMPACT_SPRITE.style.opacity = '0';
@@ -3870,7 +4124,7 @@ async function runSharehawkImpact() {
       screenNY: clamp((impactClientY - lockScreenRect.top) / lockScreenRect.height, 0, 1)
     };
     setJumbotronBroken(brokenGlassLock);
-    JUMBOTRON_GLASS_SPRITE.src = brokenGlassSpriteSrc;
+    JUMBOTRON_GLASS_SPRITE.src = glassSrc;
     updateBrokenGlassLayout();
     triggerCelebrationFX();
     JUMBOTRON_IMPACT_SPRITE.style.opacity = '0';
@@ -4122,23 +4376,12 @@ async function submitJoinCollective() {
     if (supabaseStats) {
       animateToStats(supabaseStats, 520);
     } else {
-      const res = await fetch('/api/commitments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ county: '' })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Join failed.');
-      if (data?.stats) {
-        animateToStats(data.stats, 520);
-      } else {
-        const base = latestStats || { participantsCount: 0, equalShare: PURCHASE_PRICE };
-        const nextCount = base.participantsCount + 1;
-        animateToStats({
-          participantsCount: nextCount,
-          equalShare: PURCHASE_PRICE / Math.max(nextCount, 1)
-        }, 520);
-      }
+      const base = latestStats || { participantsCount: 0, equalShare: PURCHASE_PRICE };
+      const nextCount = base.participantsCount + 1;
+      animateToStats({
+        participantsCount: nextCount,
+        equalShare: PURCHASE_PRICE / Math.max(nextCount, 1)
+      }, 520);
     }
   } catch {
     const base = latestStats || { participantsCount: 0, equalShare: PURCHASE_PRICE };
@@ -4461,6 +4704,25 @@ function toStats(raw) {
   return { participantsCount, equalShare };
 }
 
+function markRenderedParticipantsCount(count) {
+  const safeCount = Math.max(0, Math.round(Number(count) || 0));
+  if (safeCount > maxRenderedParticipantsCount) {
+    maxRenderedParticipantsCount = safeCount;
+  }
+}
+
+function applyMonotonicStatsGuard(rawStats) {
+  const stats = toStats(rawStats);
+  const safeCount = Math.max(stats.participantsCount, maxRenderedParticipantsCount);
+  if (safeCount === stats.participantsCount) {
+    return stats;
+  }
+  return {
+    participantsCount: safeCount,
+    equalShare: PURCHASE_PRICE / Math.max(safeCount, 1)
+  };
+}
+
 function getSupabaseCredentials() {
   const runtimeUrl = (window.__SUPABASE_URL || '').trim();
   const runtimeKey = (window.__SUPABASE_KEY || window.__SUPABASE_ANON_KEY || '').trim();
@@ -4627,12 +4889,19 @@ async function fetchGlobalParticipantsCount() {
   const client = initSupabaseClient();
   if (!client) return null;
 
+  const fetchStart = performance.now();
   statsDebugLog("fetch count start", { source: "supabase" });
+  const rpcStart = performance.now();
   const rpcRes = await client.rpc('get_participant_count');
+  perfLog('stats rpc:get_participant_count', {
+    durationMs: Math.round(performance.now() - rpcStart),
+    ok: !rpcRes.error
+  });
   if (!rpcRes.error && rpcRes.data != null) {
     const rpcCount = parseParticipantsCountValue(rpcRes.data);
     if (rpcCount != null) {
       statsDebugLog("fetch count via rpc", { count: rpcCount });
+      perfLog('stats fetch total', { durationMs: Math.round(performance.now() - fetchStart), source: 'rpc' });
       return rpcCount;
     }
     statsDebugLog("fetch count rpc parse failed", { data: rpcRes.data });
@@ -4641,13 +4910,19 @@ async function fetchGlobalParticipantsCount() {
     statsDebugLog("fetch count rpc failed", rpcRes.error);
   }
 
+  const tableStart = performance.now();
   const { count, error } = await client
     .from(SUPABASE_PARTICIPANTS_TABLE)
     .select('id', { count: 'exact', head: true });
+  perfLog('stats table count fallback', {
+    durationMs: Math.round(performance.now() - tableStart),
+    ok: !error
+  });
 
   if (error) throw error;
   const tableCount = Number(count || 0);
   statsDebugLog("fetch count via table", { count: tableCount });
+  perfLog('stats fetch total', { durationMs: Math.round(performance.now() - fetchStart), source: 'table' });
   return tableCount;
 }
 
@@ -4682,10 +4957,14 @@ async function insertGlobalParticipant() {
   }
 
   supabaseInsertInFlight = true;
+  const insertStart = performance.now();
   statsDebugLog("insert participant start");
   try {
+    const tokenStart = performance.now();
     const token = await getTurnstileToken();
+    perfLog('turnstile token ready', { durationMs: Math.round(performance.now() - tokenStart) });
 
+    const requestStart = performance.now();
     const response = await fetch(functionUrl, {
       method: 'POST',
       headers: {
@@ -4697,6 +4976,10 @@ async function insertGlobalParticipant() {
     });
 
     const payload = await response.json().catch(() => ({}));
+    perfLog('sharehawk edge insert', {
+      durationMs: Math.round(performance.now() - requestStart),
+      ok: response.ok
+    });
     if (!response.ok) {
       throw new Error(payload?.error || 'Unable to record share-hawk.');
     }
@@ -4707,9 +4990,11 @@ async function insertGlobalParticipant() {
     }
 
     statsDebugLog("insert participant success", { updatedCount });
+    perfLog('insert participant total', { durationMs: Math.round(performance.now() - insertStart), ok: true });
     return statsFromParticipantCount(updatedCount);
   } catch (error) {
     statsDebugLog("insert participant failed", error);
+    perfLog('insert participant total', { durationMs: Math.round(performance.now() - insertStart), ok: false, error: String(error?.message || error) });
     throw error;
   } finally {
     supabaseInsertInFlight = false;
@@ -4794,8 +5079,9 @@ function quantizeInvestmentFrameValue(value, from, to) {
 }
 
 function animateToStats(nextRaw, duration = 600, commitmentDuration = duration, onComplete) {
-  const next = toStats(nextRaw);
-  const prev = latestStats || next;
+  const next = applyMonotonicStatsGuard(nextRaw);
+  const prev = applyMonotonicStatsGuard(latestStats || next);
+  markRenderedParticipantsCount(prev.participantsCount);
   latestStats = next;
   animationToken += 1;
   const currentToken = animationToken;
@@ -4818,6 +5104,7 @@ function animateToStats(nextRaw, duration = 600, commitmentDuration = duration, 
   const maybeComplete = () => {
     completed += 1;
     if (completed < 2) return;
+    markRenderedParticipantsCount(next.participantsCount);
     statsDebugLog("animateToStats complete", next);
     statsDebugLog("jumbotron values updated", { sharehawks: formatSharehawksDisplay(next.participantsCount), commitment: formatCurrency(next.equalShare) });
     onComplete?.(next);
@@ -4830,10 +5117,12 @@ function animateToStats(nextRaw, duration = 600, commitmentDuration = duration, 
     (value) => {
       if (currentToken !== animationToken) return;
       const rounded = Math.round(value);
-      const text = formatShareholders(rounded);
+      const monotonicRounded = Math.max(maxRenderedParticipantsCount, rounded);
+      markRenderedParticipantsCount(monotonicRounded);
+      const text = formatShareholders(monotonicRounded);
       if (PARTICIPANTS_COUNT_EL) PARTICIPANTS_COUNT_EL.textContent = text;
       if (JOIN_PARTICIPANTS_COUNT_EL) JOIN_PARTICIPANTS_COUNT_EL.textContent = text;
-      setJumbotronShareholdersDisplay(formatSharehawksDisplay(rounded));
+      setJumbotronShareholdersDisplay(formatSharehawksDisplay(monotonicRounded));
       scheduleJumbotronFit();
     },
     maybeComplete
@@ -4865,55 +5154,24 @@ function animateToStats(nextRaw, duration = 600, commitmentDuration = duration, 
   );
 }
 
-async function loadStatsFromServerFallback(duration = 250, reason = 'manual') {
-  try {
-    const res = await fetch("/api/stats");
-    if (!res.ok) throw new Error("Failed to load stats.");
-    const rawStats = await res.json();
-    const stats = toStats(rawStats);
-    updateJumbotronDisplay({
-      count: stats.participantsCount,
-      investment: stats.equalShare,
-      animate: true,
-      duration,
-      commitmentDuration: duration
-    });
-    setJumbotronDebugChip(stats, 'server-fallback:' + reason);
-    statsDebugLog("server stats loaded", stats);
-    return stats;
-  } catch (error) {
-    statsDebugLog("server stats failed", error);
-    return null;
-  }
-}
-
-async function refreshStatsNow(duration = 250, reason = "manual", toastOnFailure = false, toastOnFallback = false) {
+async function refreshStatsNow(duration = 250, reason = "manual", toastOnFailure = false) {
   statsDebugLog("refresh stats start", { reason, duration });
 
   try {
     const supabaseStats = await loadGlobalStatsFromSupabase(duration, reason);
     if (supabaseStats) {
       statsDebugLog("refresh stats resolved", { reason, source: "supabase", stats: supabaseStats });
-      return { ok: true, source: 'supabase', stats: supabaseStats, fallback: false };
+      return { ok: true, source: "supabase", stats: supabaseStats, fallback: false };
     }
   } catch (error) {
     statsDebugLog("supabase stats failed", error);
-  }
-
-  const serverStats = await loadStatsFromServerFallback(duration, reason);
-  if (serverStats) {
-    if (toastOnFallback) {
-      showUiToast("Stats offline");
-    }
-    statsDebugLog("refresh stats resolved", { reason, source: "server", stats: serverStats });
-    return { ok: true, source: 'server', stats: serverStats, fallback: true };
   }
 
   if (toastOnFailure) {
     showUiToast("Stats offline");
   }
   statsDebugLog("refresh stats failed", { reason });
-  return { ok: false, source: 'none', stats: null, fallback: false };
+  return { ok: false, source: "none", stats: null, fallback: false };
 }
 
 async function runStatsHealthCheck() {
@@ -4931,7 +5189,8 @@ async function runStatsHealthCheck() {
 
 async function refreshStatsAndRenderJumbotron(reason = "jumbotron") {
   if (!isJumbotronOpen) return { ok: false, source: 'closed', stats: null, fallback: false };
-  return refreshStatsNow(420, reason, true, true);
+  const toastOnFailure = reason === 'open';
+  return refreshStatsNow(420, reason, toastOnFailure);
 }
 
 async function refreshJumbotronStatsNow(reason = "jumbotron") {
@@ -4955,7 +5214,7 @@ function startJumbotronStatsPolling() {
 }
 
 async function loadStats() {
-  const result = await refreshStatsNow(250, "init", false, false);
+  const result = await refreshStatsNow(250, "init", false);
   if (result?.ok) return;
   // Static deploy fallback keeps UI functional without server endpoints.
   const fallback = statsFromParticipantCount(latestStats?.participantsCount || 0);
@@ -4992,6 +5251,7 @@ function initRealtime() {
         table: SUPABASE_PARTICIPANTS_TABLE
       },
       async () => {
+        if (!isJumbotronOpen) return;
         try {
           await refreshStatsNow(260, "realtime", false);
         } catch {
@@ -5016,26 +5276,11 @@ if (FORM) {
         return;
       }
 
-      const payload = {
-        county: COUNTY_SELECT?.value || undefined
-      };
-
-      const res = await fetch('/api/commitments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Unable to record commitment.');
-      }
-
+      const fallbackCount = Math.max(1, Math.round((latestStats?.participantsCount || 0) + 1));
+      const fallbackStats = statsFromParticipantCount(fallbackCount);
+      animateToStats(fallbackStats);
       FORM.reset();
       if (FORM_MESSAGE) FORM_MESSAGE.textContent = 'Anonymous commitment recorded.';
-      if (data.stats) {
-        animateToStats(data.stats);
-      }
     } catch (err) {
       if (FORM_MESSAGE) FORM_MESSAGE.textContent = err.message;
     }
@@ -5123,11 +5368,26 @@ window.__triggerRunNumbers = () => {
   return false;
 };
 
+function handleSharehawkActivation(event, source = 'click') {
+  if (event) event.preventDefault();
+  if (sharehawkJoined || sharehawkAnimating || !SHARE_HAWK_BTN) return;
+  const now = performance.now();
+  if ((now - sharehawkTapHandledAt) < 220) return;
+  sharehawkTapHandledAt = now;
+  markSharehawkTap(source);
+  SHARE_HAWK_BTN.classList.add('is-pressed');
+  window.setTimeout(() => {
+    SHARE_HAWK_BTN?.classList.remove('is-pressed');
+  }, 140);
+  runSharehawkImpact(source);
+}
+
 if (SHARE_HAWK_BTN) {
+  SHARE_HAWK_BTN.addEventListener('pointerup', (event) => {
+    handleSharehawkActivation(event, 'pointerup');
+  });
   SHARE_HAWK_BTN.addEventListener('click', (event) => {
-    event.preventDefault();
-    if (sharehawkJoined) return;
-    runSharehawkImpact();
+    handleSharehawkActivation(event, 'click');
   });
 }
 
@@ -5335,6 +5595,7 @@ if (document.readyState === 'complete') {
 async function init() {
   updateUIScaleVar();
   scheduleActionButtonLabelLayout();
+  initPerfLongTaskObserver();
   hydrateSharehawkJoinedState();
   hydrateSharehawkSessionState();
   hydrateJumbotronBrokenState();
@@ -5365,12 +5626,29 @@ async function init() {
   await loadStats();
   runStatsHealthCheck();
   initRealtime();
+  prewarmSharehawkAssets();
+  requestAnimationFrame(() => {
+    perfInitIdleAt = performance.now();
+    if (perfDomReadyAt > 0) {
+      perfLog('dom->firstIdleFrame', { durationMs: Math.round(perfInitIdleAt - perfDomReadyAt) });
+    }
+  });
   maybeShowFootball();
 }
 
-init().catch((err) => {
-  console.error('[init] failed', err);
-  if (FORM_MESSAGE) {
-    FORM_MESSAGE.textContent = err.message;
-  }
-});
+initializePerfDomReadyMark();
+startBootPreload();
+
+init()
+  .then(() => {
+    bootInteractiveReady = true;
+    hideBootLoader('interactive-ready');
+  })
+  .catch((err) => {
+    bootInteractiveReady = true;
+    hideBootLoader('init-error');
+    console.error('[init] failed', err);
+    if (FORM_MESSAGE) {
+      FORM_MESSAGE.textContent = err.message;
+    }
+  });

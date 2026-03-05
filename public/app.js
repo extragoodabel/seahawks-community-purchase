@@ -11,7 +11,10 @@ const SCENE = document.querySelector('.stadium-scene');
 const SCENE_LAYER_WRAPS = SCENE ? Array.from(SCENE.querySelectorAll('.layerWrap[data-layer]')) : [];
 const SCENE_IMAGES = SCENE ? Array.from(SCENE.querySelectorAll('.layerAsset')) : [];
 const ENDZONE_LAYER_WRAP = SCENE ? SCENE.querySelector('.layerWrap--endzone') : null;
-const LED_OVERLAY = SCENE ? SCENE.querySelector('.ledOverlay') : null;
+const LED_OVERLAY = SCENE ? SCENE.querySelector('.ledOverlay--default') : null;
+const LED_MESSAGE_OVERLAY = document.getElementById('ledOverlayMessage');
+const LED_MESSAGE_CHARS = document.getElementById('ledOverlayMessageChars');
+const LED_MESSAGE_SCORE = document.getElementById('ledOverlayMessageScore');
 const LITTLE_SCREENS_DIM = document.getElementById('littleScreensDim');
 const LITTLE_SCREENS_LIT = document.getElementById('littleScreensLit');
 const SPARKLE_REGIONS = SCENE ? Array.from(SCENE.querySelectorAll('.sparkleRegion')) : [];
@@ -72,6 +75,16 @@ const KIT_SUBSCRIBE_MOUNT = document.getElementById('kitSubscribeMount');
 const ACTION_ROW_SECONDARY = document.getElementById('actionRowSecondary');
 const SUBSCRIBE_BTN = document.getElementById('subscribeBtn');
 const SHARE_BTN = document.getElementById('shareBtn');
+const FIELD_GOAL_LAUNCHER = document.getElementById('fieldGoalLauncher');
+const FIELD_GOAL_OVERLAY = document.getElementById('fieldGoalGameOverlay');
+const FIELD_GOAL_BALL = document.getElementById('fieldGoalBall');
+const FIELD_GOAL_METER = document.getElementById('fieldGoalMeter');
+const FIELD_GOAL_METER_INDICATOR = document.getElementById('fieldGoalMeterIndicator');
+const FIELD_GOAL_INSTRUCTION = document.getElementById('fieldGoalInstruction');
+const FIELD_GOAL_RESULT = document.getElementById('fieldGoalResult');
+const FIELD_GOAL_CLOSE_BTN = document.getElementById('fieldGoalCloseBtn');
+const FIELD_GOAL_SCOREBOARD_STATUS = document.getElementById('fieldGoalScoreboardStatus');
+const FIELD_GOAL_COUNTER = document.getElementById('fieldGoalCounter');
 const UI_TOAST = document.getElementById('uiToast');
 const ACTION_BUTTON_LABELS = Array.from(document.querySelectorAll('.uiOverlay__actions .uiBtn__label'));
 const BODY = document.body;
@@ -161,6 +174,7 @@ const PROPOSAL_SCROLL_DROP_MS = 640;
 const PROPOSAL_SCROLL_OPEN_MS = 480;
 const JUMBOTRON_KICKOFF_TARGET = new Date('2026-09-10T17:15:00-07:00');
 const JUMBOTRON_COUNTDOWN_ENABLED = false;
+const SUPABASE_PARTICIPANTS_TABLE = 'participants';
 let latestStats = null;
 let animationToken = 0;
 let sceneInitialized = false;
@@ -260,6 +274,44 @@ let isSubscribeOpen = false;
 let actionLabelLayoutRaf = 0;
 let isSharehawkSession = false;
 let uiToastTimerId = 0;
+let supabaseClient = null;
+let supabaseMode = false;
+let supabaseWarnedMissingConfig = false;
+let supabaseInsertInFlight = false;
+let fieldGoalUnlocked = false;
+let fieldGoalPlayed = false;
+let fieldGoalGameActive = false;
+let fieldGoalReadInteracted = false;
+let fieldGoalNumbersInteracted = false;
+let fieldGoalKickAnimating = false;
+let fieldGoalKickRafId = 0;
+let fieldGoalMeterValue = 0;
+let fieldGoalGlobalCount = 0;
+let fieldGoalLauncherVisible = false;
+let fieldGoalLauncherShownYet = false;
+let fieldGoalLauncherPopTimerId = 0;
+let fieldGoalPointerId = null;
+let fieldGoalDragStartPoint = null;
+let fieldGoalDragCurrentPoint = null;
+let fieldGoalDragStartAt = 0;
+let fieldGoalBallBaseX = 0;
+let fieldGoalBallBaseY = 0;
+let fieldGoalBallBaseWidth = 0;
+let fieldGoalBallCurrentX = 0;
+let fieldGoalBallCurrentY = 0;
+let fieldGoalInstructionTimerId = 0;
+let ledMessageTimerId = 0;
+let fieldGoalHintSeen = false;
+
+const fieldGoalMiniGameState = {
+  unlocked: false,
+  active: false,
+  meterValue: 0.5,
+  swipeAngle: Math.PI / 2,
+  inFlight: false,
+  hasSwiped: false,
+  hasTapped: false
+};
 
 const SPARKLE_COLORS = ['#108040', '#263c92', '#ffffff'];
 const SPARKLE_MAX_CONCURRENT = 1000;
@@ -301,6 +353,20 @@ const JUMBOTRON_LABEL_FULL_TOP = 'NUMBER OF SHARE-HAWKS';
 const JUMBOTRON_LABEL_FULL_BOTTOM = 'INVESTMENT/SHARE-HAWK';
 const JUMBOTRON_LABEL_COMPACT_TOP = '# OF SHARE-HAWKS';
 const JUMBOTRON_LABEL_COMPACT_BOTTOM = 'INVESTMENT/EACH';
+const FIELD_GOAL_PLAYED_SESSION_KEY = 'fgPlayed';
+const FIELD_GOAL_READ_SESSION_KEY = 'fgRead';
+const FIELD_GOAL_NUMBERS_SESSION_KEY = 'fgNumbers';
+const FIELD_GOAL_LAUNCHER_SHOWN_SESSION_KEY = 'fgLauncherShown';
+const FIELD_GOAL_HINT_SEEN_SESSION_KEY = 'fgDragHintSeen';
+const FIELD_GOAL_ACTIVE_BALL_WIDTH_RATIO = 0.125;
+const FIELD_GOAL_DRAG_RADIUS_RATIO = 0.08;
+const FIELD_GOAL_POWER_DISTANCE_RATIO = 0.26;
+const FIELD_GOAL_MIN_FLICK_DISTANCE = 18;
+const FIELD_GOAL_LED_MISS_DURATION_MS = 1000;
+const FIELD_GOAL_LED_SUCCESS_DURATION_MS = 1500;
+const FIELD_GOAL_INSTRUCTION_DURATION_MS = 1200;
+const FIELD_GOAL_POWER_RED_MAX = 0.30;
+const FIELD_GOAL_POWER_GREEN_MAX = 0.85;
 
 // Hawk spawn slots are defined as "between layers" by mounting the sprite
 // inside the lower layer host. This keeps it visually between layer stacks.
@@ -1362,6 +1428,609 @@ function hydrateSharehawkSessionState() {
   }
 }
 
+
+function formatFieldGoalCount(value) {
+  const safe = Math.max(0, Math.floor(Number(value) || 0));
+  return formatSharehawksDisplay(safe);
+}
+
+function setFieldGoalCounterDisplay(value) {
+  fieldGoalGlobalCount = Math.max(0, Math.floor(Number(value) || 0));
+  if (FIELD_GOAL_COUNTER) {
+    FIELD_GOAL_COUNTER.textContent = formatFieldGoalCount(fieldGoalGlobalCount);
+  }
+  if (LED_MESSAGE_SCORE) {
+    LED_MESSAGE_SCORE.textContent = String(fieldGoalGlobalCount).padStart(2, '0');
+  }
+}
+
+function clearLedMessageTimer() {
+  if (!ledMessageTimerId) return;
+  clearTimeout(ledMessageTimerId);
+  ledMessageTimerId = 0;
+}
+
+function setLedOverlayVisibility(showDefault, showMessage) {
+  if (LED_OVERLAY) {
+    LED_OVERLAY.classList.toggle('ledOverlay--on', !!showDefault);
+    LED_OVERLAY.classList.toggle('ledOverlay--off', !showDefault);
+    LED_OVERLAY.setAttribute('aria-hidden', showDefault ? 'false' : 'true');
+  }
+  if (LED_MESSAGE_OVERLAY) {
+    LED_MESSAGE_OVERLAY.classList.toggle('ledOverlay--on', !!showMessage);
+    LED_MESSAGE_OVERLAY.classList.toggle('ledOverlay--off', !showMessage);
+    LED_MESSAGE_OVERLAY.setAttribute('aria-hidden', showMessage ? 'false' : 'true');
+  }
+}
+
+function renderLedMessageChars(message = '') {
+  if (!LED_MESSAGE_CHARS) return;
+  const chars = String(message || '').toUpperCase().replace(/\s+/g, ' ').slice(0, 12);
+  LED_MESSAGE_CHARS.textContent = '';
+  for (let i = 0; i < chars.length; i += 1) {
+    const span = document.createElement('span');
+    span.className = 'ledChar';
+    span.style.setProperty('--led-char-delay', `${i * 40}ms`);
+    const char = chars[i];
+    span.textContent = char === ' ' ? '\u00A0' : char;
+    LED_MESSAGE_CHARS.appendChild(span);
+  }
+}
+
+function setLedMessage(message = '', autoClearMs = 0) {
+  renderLedMessageChars(message);
+  clearLedMessageTimer();
+  if (autoClearMs > 0) {
+    ledMessageTimerId = window.setTimeout(() => {
+      ledMessageTimerId = 0;
+      renderLedMessageChars('');
+    }, autoClearMs);
+  }
+}
+
+function setFieldGoalLedGameMode(active) {
+  if (active) {
+    setLedOverlayVisibility(false, true);
+    setLedMessage('');
+  } else {
+    clearLedMessageTimer();
+    setLedMessage('');
+    setLedOverlayVisibility(true, false);
+  }
+}
+
+function isHomeScreenVisibleForFieldGoal() {
+  if (!BODY || !splashFinished) return false;
+  return !proposalOpen
+    && !isJumbotronOpen
+    && !isSubscribeOpen
+    && !receiptPreviewOpen
+    && !fieldGoalGameActive;
+}
+
+function setFieldGoalLauncherVisible(active) {
+  fieldGoalLauncherVisible = !!active;
+  if (!BODY) return;
+  BODY.classList.toggle('fg-launcher-visible', fieldGoalLauncherVisible);
+}
+
+function runFieldGoalLauncherPopOnce() {
+  if (!BODY || fieldGoalLauncherShownYet) return;
+  fieldGoalLauncherShownYet = true;
+  BODY.classList.add('fg-launcher-pop');
+  try {
+    sessionStorage.setItem(FIELD_GOAL_LAUNCHER_SHOWN_SESSION_KEY, '1');
+  } catch {
+    // no-op
+  }
+  if (fieldGoalLauncherPopTimerId) {
+    clearTimeout(fieldGoalLauncherPopTimerId);
+  }
+  fieldGoalLauncherPopTimerId = window.setTimeout(() => {
+    fieldGoalLauncherPopTimerId = 0;
+    BODY.classList.remove('fg-launcher-pop');
+  }, 560);
+}
+
+function maybeShowFootball() {
+  const canShow = fieldGoalUnlocked
+    && !fieldGoalPlayed
+    && isHomeScreenVisibleForFieldGoal();
+  setFieldGoalLauncherVisible(canShow);
+  if (canShow) {
+    runFieldGoalLauncherPopOnce();
+  }
+}
+
+function setFieldGoalUnlocked(active) {
+  fieldGoalUnlocked = !!active;
+  fieldGoalMiniGameState.unlocked = fieldGoalUnlocked;
+  if (BODY) {
+    BODY.classList.toggle('fg-unlocked', fieldGoalUnlocked);
+  }
+}
+
+function setFieldGoalPlayed(active, persist = true) {
+  fieldGoalPlayed = !!active;
+  if (BODY) {
+    BODY.classList.toggle('fg-played', fieldGoalPlayed);
+  }
+  if (persist) {
+    try {
+      if (fieldGoalPlayed) {
+        sessionStorage.setItem(FIELD_GOAL_PLAYED_SESSION_KEY, '1');
+      } else {
+        sessionStorage.removeItem(FIELD_GOAL_PLAYED_SESSION_KEY);
+      }
+    } catch {
+      // no-op
+    }
+  }
+}
+
+function markFieldGoalInteraction(type) {
+  if (type === 'proposal') {
+    fieldGoalReadInteracted = true;
+    try { sessionStorage.setItem(FIELD_GOAL_READ_SESSION_KEY, '1'); } catch {}
+  } else if (type === 'numbers') {
+    fieldGoalNumbersInteracted = true;
+    try { sessionStorage.setItem(FIELD_GOAL_NUMBERS_SESSION_KEY, '1'); } catch {}
+  }
+  if (fieldGoalReadInteracted && fieldGoalNumbersInteracted) {
+    setFieldGoalUnlocked(true);
+  }
+}
+
+function hydrateFieldGoalProgressState() {
+  try {
+    fieldGoalReadInteracted = sessionStorage.getItem(FIELD_GOAL_READ_SESSION_KEY) === '1';
+    fieldGoalNumbersInteracted = sessionStorage.getItem(FIELD_GOAL_NUMBERS_SESSION_KEY) === '1';
+    fieldGoalLauncherShownYet = sessionStorage.getItem(FIELD_GOAL_LAUNCHER_SHOWN_SESSION_KEY) === '1';
+    fieldGoalHintSeen = sessionStorage.getItem(FIELD_GOAL_HINT_SEEN_SESSION_KEY) === '1';
+    setFieldGoalPlayed(sessionStorage.getItem(FIELD_GOAL_PLAYED_SESSION_KEY) === '1', false);
+  } catch {
+    fieldGoalReadInteracted = false;
+    fieldGoalNumbersInteracted = false;
+    fieldGoalLauncherShownYet = false;
+    fieldGoalHintSeen = false;
+    setFieldGoalPlayed(false, false);
+  }
+
+  setFieldGoalCounterDisplay(0);
+  setFieldGoalUnlocked(fieldGoalReadInteracted && fieldGoalNumbersInteracted);
+  setFieldGoalLauncherVisible(false);
+  setFieldGoalLedGameMode(false);
+}
+
+function getFieldGoalZone(frameRect) {
+  return {
+    left: frameRect.width * 0.456,
+    right: frameRect.width * 0.544,
+    top: frameRect.height * 0.545,
+    bottom: frameRect.height * 0.705
+  };
+}
+
+function resetFieldGoalBallVisual() {
+  if (!FIELD_GOAL_BALL) return;
+  FIELD_GOAL_BALL.style.width = '';
+  FIELD_GOAL_BALL.style.transform = 'translate3d(-9999px, -9999px, 0)';
+  FIELD_GOAL_BALL.style.opacity = '0';
+  FIELD_GOAL_BALL.style.removeProperty('--fg-ball-x');
+  FIELD_GOAL_BALL.style.removeProperty('--fg-ball-y');
+}
+
+function setFieldGoalInstructionVisible(active) {
+  if (!BODY) return;
+  BODY.classList.toggle('fg-instruction', !!active);
+}
+
+function setFieldGoalResult(text = '') {
+  if (!FIELD_GOAL_RESULT || !BODY) return;
+  FIELD_GOAL_RESULT.textContent = text;
+  const show = Boolean(text);
+  BODY.classList.toggle('fg-result-show', show);
+}
+
+function setFieldGoalGameActive(active) {
+  fieldGoalGameActive = !!active;
+  fieldGoalMiniGameState.active = fieldGoalGameActive;
+  if (!BODY || !FIELD_GOAL_OVERLAY) return;
+  BODY.classList.toggle('fg-game-active', fieldGoalGameActive);
+  FIELD_GOAL_OVERLAY.setAttribute('aria-hidden', fieldGoalGameActive ? 'false' : 'true');
+}
+
+function setFieldGoalMeterValue(value) {
+  fieldGoalMeterValue = clamp(Number(value) || 0, 0, 1);
+  fieldGoalMiniGameState.meterValue = fieldGoalMeterValue;
+  if (FIELD_GOAL_METER) {
+    FIELD_GOAL_METER.style.setProperty('--fg-meter-value', fieldGoalMeterValue.toFixed(4));
+    FIELD_GOAL_METER.classList.remove('is-red', 'is-green', 'is-yellow');
+    if (fieldGoalMeterValue <= FIELD_GOAL_POWER_RED_MAX) {
+      FIELD_GOAL_METER.classList.add('is-red');
+    } else if (fieldGoalMeterValue <= FIELD_GOAL_POWER_GREEN_MAX) {
+      FIELD_GOAL_METER.classList.add('is-green');
+    } else {
+      FIELD_GOAL_METER.classList.add('is-yellow');
+    }
+  }
+  if (FIELD_GOAL_METER_INDICATOR) {
+    FIELD_GOAL_METER_INDICATOR.style.left = (fieldGoalMeterValue * 100).toFixed(2) + '%';
+  }
+}
+
+function setFieldGoalMeterActive(active) {
+  if (!BODY) return;
+  BODY.classList.toggle('fg-meter-active', !!active);
+}
+
+function setFieldGoalBallReady(active) {
+  if (!BODY) return;
+  BODY.classList.toggle('fg-ball-ready', !!active);
+}
+
+function setFieldGoalBallHeld(active) {
+  if (!BODY) return;
+  BODY.classList.toggle('fg-ball-held', !!active);
+}
+
+function clearFieldGoalInstructionTimer() {
+  if (!fieldGoalInstructionTimerId) return;
+  clearTimeout(fieldGoalInstructionTimerId);
+  fieldGoalInstructionTimerId = 0;
+}
+
+function showFieldGoalInstructionIfNeeded() {
+  if (fieldGoalHintSeen) {
+    setFieldGoalInstructionVisible(false);
+    return;
+  }
+  fieldGoalHintSeen = true;
+  try {
+    sessionStorage.setItem(FIELD_GOAL_HINT_SEEN_SESSION_KEY, '1');
+  } catch {
+    // no-op
+  }
+  setFieldGoalInstructionVisible(true);
+  clearFieldGoalInstructionTimer();
+  fieldGoalInstructionTimerId = window.setTimeout(() => {
+    fieldGoalInstructionTimerId = 0;
+    setFieldGoalInstructionVisible(false);
+  }, FIELD_GOAL_INSTRUCTION_DURATION_MS);
+}
+
+function stopFieldGoalKickAnimation() {
+  if (!fieldGoalKickRafId) return;
+  cancelAnimationFrame(fieldGoalKickRafId);
+  fieldGoalKickRafId = 0;
+}
+
+function setFieldGoalBallPosition(centerX, centerY, widthPx, rotationDeg = 0) {
+  if (!FIELD_GOAL_BALL) return;
+  const w = Math.max(1, Number(widthPx) || 1);
+  const h = w * 0.62;
+  const x = centerX - w * 0.5;
+  const y = centerY - h * 0.5;
+  fieldGoalBallCurrentX = centerX;
+  fieldGoalBallCurrentY = centerY;
+  FIELD_GOAL_BALL.style.opacity = '1';
+  FIELD_GOAL_BALL.style.width = w.toFixed(2) + 'px';
+  FIELD_GOAL_BALL.style.setProperty('--fg-ball-x', x.toFixed(2) + 'px');
+  FIELD_GOAL_BALL.style.setProperty('--fg-ball-y', y.toFixed(2) + 'px');
+  FIELD_GOAL_BALL.style.transform = 'translate3d(' + x.toFixed(2) + 'px, ' + y.toFixed(2) + 'px, 0) rotate(' + Number(rotationDeg || 0).toFixed(2) + 'deg)';
+}
+
+function getFieldGoalDragOffset(point, frameRect) {
+  if (!fieldGoalDragStartPoint || !point || !frameRect) {
+    return { offsetX: 0, offsetY: 0, rawDistance: 0, normalizedPower: 0, dx: 0, dy: 0 };
+  }
+  const dx = point.x - fieldGoalDragStartPoint.x;
+  const dy = point.y - fieldGoalDragStartPoint.y;
+  const rawDistance = Math.hypot(dx, dy);
+  const maxRadius = clamp(frameRect.width * FIELD_GOAL_DRAG_RADIUS_RATIO, 54, 96);
+  const factor = rawDistance > maxRadius && rawDistance > 0 ? (maxRadius / rawDistance) : 1;
+  const offsetX = dx * factor;
+  const offsetY = dy * factor;
+  const normalizedPower = clamp(rawDistance / Math.max(1, frameRect.width * FIELD_GOAL_POWER_DISTANCE_RATIO), 0, 1);
+  return { offsetX, offsetY, rawDistance, normalizedPower, dx, dy };
+}
+
+function prepareFieldGoalBallForKick() {
+  if (!STADIUM_FRAME_MASK || !FIELD_GOAL_BALL) return;
+  const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
+  fieldGoalBallBaseWidth = frameRect.width * FIELD_GOAL_ACTIVE_BALL_WIDTH_RATIO;
+  fieldGoalBallBaseX = frameRect.width * 0.5;
+  fieldGoalBallBaseY = frameRect.height * 0.905;
+
+  setFieldGoalBallPosition(fieldGoalBallBaseX, fieldGoalBallBaseY, fieldGoalBallBaseWidth, 0);
+
+  fieldGoalPointerId = null;
+  fieldGoalDragStartPoint = null;
+  fieldGoalDragCurrentPoint = null;
+  fieldGoalDragStartAt = 0;
+  fieldGoalMiniGameState.hasSwiped = false;
+  fieldGoalMiniGameState.hasTapped = false;
+  fieldGoalMiniGameState.swipeAngle = Math.PI / 2;
+  setFieldGoalMeterValue(0);
+  setFieldGoalMeterActive(false);
+  setFieldGoalBallHeld(false);
+  setFieldGoalBallReady(true);
+}
+
+function closeFieldGoalGame() {
+  stopFieldGoalKickAnimation();
+  clearFieldGoalInstructionTimer();
+  fieldGoalKickAnimating = false;
+  fieldGoalPointerId = null;
+  fieldGoalDragStartPoint = null;
+  fieldGoalDragCurrentPoint = null;
+  fieldGoalMiniGameState.inFlight = false;
+  fieldGoalMiniGameState.hasSwiped = false;
+  fieldGoalMiniGameState.hasTapped = false;
+  setFieldGoalMeterActive(false);
+  setFieldGoalBallReady(false);
+  setFieldGoalBallHeld(false);
+  setFieldGoalInstructionVisible(false);
+  setFieldGoalResult('');
+  setFieldGoalGameActive(false);
+  setFieldGoalLedGameMode(false);
+  if (BODY) {
+    BODY.classList.remove('field-goal-success');
+  }
+  resetFieldGoalBallVisual();
+  maybeShowFootball();
+}
+
+function getPointFromEvent(event) {
+  if (!STADIUM_FRAME_MASK) return null;
+  const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
+  if (!frameRect.width || !frameRect.height) return null;
+  const point = {
+    x: event.clientX - frameRect.left,
+    y: event.clientY - frameRect.top
+  };
+  point.x = clamp(point.x, 0, frameRect.width);
+  point.y = clamp(point.y, 0, frameRect.height);
+  return point;
+}
+
+function startFieldGoalGame() {
+  if (!fieldGoalUnlocked || fieldGoalGameActive) return;
+  if (!STADIUM_FRAME_MASK || !FIELD_GOAL_BALL) return;
+
+  if (proposalOpen) closeProposalReveal();
+  if (isJumbotronOpen) closeJumbotronOverlay();
+  if (receiptPreviewOpen) closeReceiptPreview(false);
+  if (isSubscribeOpen) closeSubscribeWindow();
+
+  setFieldGoalPlayed(true, true);
+  setFieldGoalGameActive(true);
+  setFieldGoalLauncherVisible(false);
+  setFieldGoalCounterDisplay(0);
+  setFieldGoalResult('');
+  if (BODY) {
+    BODY.classList.remove('field-goal-success');
+  }
+  setFieldGoalLedGameMode(true);
+
+  prepareFieldGoalBallForKick();
+  showFieldGoalInstructionIfNeeded();
+}
+
+function syncFieldGoalGameLayout() {
+  if (!fieldGoalGameActive || fieldGoalKickAnimating || fieldGoalPointerId !== null) return;
+  prepareFieldGoalBallForKick();
+}
+
+function queueNextFieldGoalKick(delayMs = 850) {
+  window.setTimeout(() => {
+    if (!fieldGoalGameActive) return;
+    if (BODY) {
+      BODY.classList.remove('field-goal-success');
+    }
+    setFieldGoalResult('');
+    setLedMessage('');
+    prepareFieldGoalBallForKick();
+  }, delayMs);
+}
+
+function handleFieldGoalSuccess() {
+  if (BODY) {
+    BODY.classList.add('field-goal-success');
+  }
+  triggerCelebrationFX({ independent: true, showWelcome: false });
+
+  const nextCount = fieldGoalGlobalCount + 1;
+  setFieldGoalCounterDisplay(nextCount);
+  setFieldGoalResult('');
+  setLedMessage("IT'S GOOD", FIELD_GOAL_LED_SUCCESS_DURATION_MS);
+
+  queueNextFieldGoalKick(1600);
+}
+
+function handleFieldGoalMiss(message) {
+  if (BODY) {
+    BODY.classList.remove('field-goal-success');
+  }
+  setFieldGoalResult('');
+  setLedMessage(message, FIELD_GOAL_LED_MISS_DURATION_MS);
+  queueNextFieldGoalKick(1200);
+}
+
+function runFieldGoalKickWithFlick(swipeAngle, power) {
+  if (!STADIUM_FRAME_MASK || !FIELD_GOAL_BALL) return;
+  if (fieldGoalKickAnimating) return;
+
+  fieldGoalKickAnimating = true;
+  fieldGoalMiniGameState.inFlight = true;
+  setFieldGoalBallHeld(false);
+  setFieldGoalBallReady(false);
+  setFieldGoalMeterActive(false);
+
+  const overpowered = clamp((power - FIELD_GOAL_POWER_GREEN_MAX) / (1 - FIELD_GOAL_POWER_GREEN_MAX), 0, 1);
+  const driftDeg = (Math.random() * 2 - 1) * (9 * overpowered);
+  const finalAngle = swipeAngle + (driftDeg * (Math.PI / 180));
+
+  const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
+  const zone = getFieldGoalZone(frameRect);
+  const speed = 520 + (power * 760);
+  const vx = Math.cos(finalAngle) * speed;
+  const liftAssist = power >= FIELD_GOAL_POWER_RED_MAX && power <= FIELD_GOAL_POWER_GREEN_MAX ? 1.08 : 1;
+  const vy = Math.sin(finalAngle) * speed * liftAssist;
+  const gravity = 980;
+  const startX = fieldGoalBallCurrentX || (frameRect.width * 0.5);
+  const startY = fieldGoalBallCurrentY || (frameRect.height * 0.905);
+  const baseWidth = frameRect.width * FIELD_GOAL_ACTIVE_BALL_WIDTH_RATIO;
+  const maxFlightMs = 2200;
+  const startedAt = performance.now();
+  let previousY = startY;
+
+  const tick = (now) => {
+    const elapsedMs = now - startedAt;
+    const t = elapsedMs / 1000;
+    const x = startX + (vx * t);
+    const y = startY - (vy * t - 0.5 * gravity * t * t);
+    const scale = clamp(1 - t * 0.36, 0.35, 1);
+    const w = baseWidth * scale;
+    const rotation = t * (780 + (power * 260));
+
+    setFieldGoalBallPosition(x, y, w, rotation);
+
+    const descending = y > previousY;
+    const inGoalWindow = x >= zone.left && x <= zone.right && y >= zone.top && y <= zone.bottom;
+    previousY = y;
+
+    if (descending && inGoalWindow) {
+      fieldGoalKickRafId = 0;
+      fieldGoalKickAnimating = false;
+      fieldGoalMiniGameState.inFlight = false;
+      FIELD_GOAL_BALL.style.opacity = '0';
+      handleFieldGoalSuccess();
+      return;
+    }
+
+    if (elapsedMs >= maxFlightMs || x < -80 || x > frameRect.width + 80 || y > frameRect.height + 120) {
+      fieldGoalKickRafId = 0;
+      fieldGoalKickAnimating = false;
+      fieldGoalMiniGameState.inFlight = false;
+      FIELD_GOAL_BALL.style.opacity = '0';
+      const missText = x < zone.left ? 'WIDE LEFT' : x > zone.right ? 'WIDE RIGHT' : 'NO GOOD';
+      handleFieldGoalMiss(missText);
+      return;
+    }
+
+    fieldGoalKickRafId = requestAnimationFrame(tick);
+  };
+
+  fieldGoalKickRafId = requestAnimationFrame(tick);
+}
+
+function handleFieldGoalPointerDown(event) {
+  if (!fieldGoalGameActive || fieldGoalKickAnimating || !FIELD_GOAL_BALL || !STADIUM_FRAME_MASK) return;
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  const point = getPointFromEvent(event);
+  if (!point) return;
+
+  event.preventDefault();
+  fieldGoalPointerId = event.pointerId;
+  fieldGoalDragStartPoint = point;
+  fieldGoalDragCurrentPoint = point;
+  fieldGoalDragStartAt = performance.now();
+
+  fieldGoalMiniGameState.hasSwiped = false;
+  fieldGoalMiniGameState.hasTapped = false;
+
+  setFieldGoalBallHeld(true);
+  setFieldGoalMeterActive(true);
+  setFieldGoalMeterValue(0);
+
+  try {
+    FIELD_GOAL_BALL.setPointerCapture(event.pointerId);
+  } catch {
+    // no-op
+  }
+}
+
+function handleFieldGoalPointerMove(event) {
+  if (!fieldGoalGameActive || fieldGoalKickAnimating || !STADIUM_FRAME_MASK) return;
+  if (fieldGoalPointerId === null || event.pointerId !== fieldGoalPointerId || !fieldGoalDragStartPoint) return;
+  const point = getPointFromEvent(event);
+  if (!point) return;
+
+  event.preventDefault();
+  fieldGoalDragCurrentPoint = point;
+
+  const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
+  const drag = getFieldGoalDragOffset(point, frameRect);
+  const heldWidth = fieldGoalBallBaseWidth * 1.12;
+  setFieldGoalBallPosition(fieldGoalBallBaseX + drag.offsetX, fieldGoalBallBaseY + drag.offsetY, heldWidth, 0);
+  setFieldGoalMeterValue(drag.normalizedPower);
+
+  const swipeDy = fieldGoalDragStartPoint.y - point.y;
+  if (swipeDy > 6) {
+    fieldGoalMiniGameState.hasSwiped = true;
+    fieldGoalMiniGameState.swipeAngle = Math.atan2(swipeDy, drag.dx);
+  }
+}
+
+function handleFieldGoalPointerUp(event) {
+  if (!fieldGoalGameActive || fieldGoalKickAnimating) return;
+  if (fieldGoalPointerId === null || event.pointerId !== fieldGoalPointerId || !fieldGoalDragStartPoint || !STADIUM_FRAME_MASK) return;
+
+  event.preventDefault();
+  const endPoint = getPointFromEvent(event) || fieldGoalDragCurrentPoint || fieldGoalDragStartPoint;
+  const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
+  const drag = getFieldGoalDragOffset(endPoint, frameRect);
+  const swipeDy = fieldGoalDragStartPoint.y - endPoint.y;
+  const swipeAngle = Math.atan2(swipeDy, drag.dx || 0);
+  const elapsedMs = Math.max(16, performance.now() - fieldGoalDragStartAt);
+  const activePointerId = fieldGoalPointerId;
+  fieldGoalPointerId = null;
+
+  try {
+    if (activePointerId !== null && FIELD_GOAL_BALL?.hasPointerCapture(activePointerId)) {
+      FIELD_GOAL_BALL.releasePointerCapture(activePointerId);
+    }
+  } catch {
+    // no-op
+  }
+  fieldGoalDragStartPoint = null;
+  fieldGoalDragCurrentPoint = null;
+  fieldGoalDragStartAt = 0;
+
+  setFieldGoalBallHeld(false);
+  setFieldGoalMeterActive(false);
+
+  if (swipeDy < 12 || drag.rawDistance < FIELD_GOAL_MIN_FLICK_DISTANCE) {
+    prepareFieldGoalBallForKick();
+    return;
+  }
+
+  const distancePower = clamp(drag.rawDistance / Math.max(1, frameRect.width * FIELD_GOAL_POWER_DISTANCE_RATIO), 0, 1);
+  const velocityNorm = clamp((drag.rawDistance / elapsedMs) / 1.15, 0, 1);
+  const combinedPower = clamp(distancePower * 0.75 + velocityNorm * 0.25, 0.08, 1);
+
+  fieldGoalMiniGameState.hasSwiped = true;
+  fieldGoalMiniGameState.hasTapped = true;
+  fieldGoalMiniGameState.swipeAngle = swipeAngle;
+  setFieldGoalMeterValue(combinedPower);
+
+  runFieldGoalKickWithFlick(swipeAngle, combinedPower);
+}
+
+function handleFieldGoalPointerCancel() {
+  if (fieldGoalPointerId === null) return;
+  fieldGoalPointerId = null;
+  fieldGoalDragStartPoint = null;
+  fieldGoalDragCurrentPoint = null;
+  fieldGoalDragStartAt = 0;
+  setFieldGoalBallHeld(false);
+  setFieldGoalMeterActive(false);
+  if (fieldGoalGameActive && !fieldGoalKickAnimating) {
+    prepareFieldGoalBallForKick();
+  }
+}
+
 function isMobileReceiptSaveMode() {
   const coarse = window.matchMedia?.('(pointer: coarse)')?.matches;
   return Boolean(coarse);
@@ -1380,7 +2049,9 @@ function closeReceiptPreview(exitJumbotron = true) {
   BODY?.classList.remove('receipt-preview-opening');
   if (exitJumbotron && isJumbotronOpen && !isJumbotronAnimating) {
     closeJumbotronOverlay();
+    return;
   }
+  maybeShowFootball();
 }
 
 function setSubscribeOverlayVisible(active) {
@@ -1414,13 +2085,14 @@ function openSubscribeWindow() {
 function closeSubscribeWindow() {
   if (!isSubscribeOpen) return;
   setSubscribeOverlayVisible(false);
+  maybeShowFootball();
 }
 
 function updateReceiptPreviewHint() {
   if (!RECEIPT_PREVIEW_HINT) return;
   RECEIPT_PREVIEW_HINT.setAttribute(
     'aria-label',
-    isMobileReceiptSaveMode() ? 'Hold down to save' : 'Click to download'
+    isMobileReceiptSaveMode() ? 'Tap and hold ticket to save' : 'Click to download'
   );
 }
 
@@ -1522,122 +2194,139 @@ async function buildSharehawkReceiptPNGData({ sharehawkNumber }) {
 
   const safeNumber = Math.max(0, Math.floor(Number(sharehawkNumber) || 0));
   const displayNumber = padNumber(safeNumber, 6);
-  const [ticketArtImg, stadiumComposite, mountainsImg, skylineImg, leftImg, rightImg, endzoneImg, fieldImg] = await Promise.all([
-    loadImageForTicket('/assets/ticket-art.png'),
-    loadImageForTicket('/assets/mobile layout guide - stadium design.png'),
-    loadImageForTicket('/stadium/01-mountains.png'),
-    loadImageForTicket('/stadium/02-skyline.png'),
-    loadImageForTicket('/stadium/03-stadium-left.png'),
-    loadImageForTicket('/stadium/04-stadium-right.png'),
-    loadImageForTicket('/stadium/06-endzone-base.png'),
-    loadImageForTicket('/stadium/07-field.png')
-  ]);
+  const perShareValue = PURCHASE_PRICE / Math.max(safeNumber, 1);
+  const perShareDisplay = formatCurrency(perShareValue);
+  const now = new Date();
+  const dateDisplay = now.toLocaleDateString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric'
+  });
+  const timeDisplay = now.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+
+  const templateImg = await loadImageForTicket('/assets/ticket-template.png');
 
   const W = canvas.width;
   const H = canvas.height;
-  const PAD = 80;
-  const innerX = PAD;
-  const innerY = PAD;
-  const innerW = W - PAD * 2;
-  const innerH = H - PAD * 2;
-  const topH = Math.round(innerH * 0.58);
-  const dividerY = innerY + topH;
-  const infoY = dividerY + 74;
-  const infoH = innerY + innerH - infoY;
+  const MAIN_BLOCK = { x: 166, y: 1150, w: 548, h: 400 };
+  const STUB_BLOCK = { x: 166, y: 1623, w: 279, h: 179 };
 
-  ctx.fillStyle = '#eceee9';
-  ctx.fillRect(0, 0, W, H);
+  const COLOR_WHITE = '#ffffff';
+  const COLOR_GREEN = '#01843e';
+  const COLOR_GREY = '#b2b4b1';
+  const FONT_STACK = '"Space Mono", "IBM Plex Mono", "Courier New", monospace';
 
-  // Ticket body
-  ctx.fillStyle = '#f7f8f6';
-  ctx.fillRect(innerX, innerY, innerW, innerH);
-  ctx.strokeStyle = '#263c92';
-  ctx.lineWidth = 6;
-  ctx.strokeRect(innerX, innerY, innerW, innerH);
+  function drawWrapped(text, x, y, maxWidth, lineHeight, maxLines = 4) {
+    const words = String(text).split(/\s+/).filter(Boolean);
+    const lines = [];
+    let current = '';
 
-  // Top image area (no text overlay).
+    for (let i = 0; i < words.length; i += 1) {
+      const candidate = current ? current + ' ' + words[i] : words[i];
+      if (ctx.measureText(candidate).width <= maxWidth || !current) {
+        current = candidate;
+      } else {
+        lines.push(current);
+        current = words[i];
+        if (lines.length >= maxLines - 1) {
+          break;
+        }
+      }
+    }
+
+    if (current) lines.push(current);
+
+    for (let i = 0; i < Math.min(lines.length, maxLines); i += 1) {
+      ctx.fillText(lines[i], x, y + i * lineHeight);
+    }
+
+    return y + Math.min(lines.length, maxLines) * lineHeight;
+  }
+
+  ctx.clearRect(0, 0, W, H);
+  if (templateImg) {
+    ctx.drawImage(templateImg, 0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#0f2c8f';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Main information block
   ctx.save();
   ctx.beginPath();
-  ctx.rect(innerX, innerY, innerW, topH);
+  ctx.rect(MAIN_BLOCK.x, MAIN_BLOCK.y, MAIN_BLOCK.w, MAIN_BLOCK.h);
   ctx.clip();
-  ctx.fillStyle = '#2f5ea4';
-  ctx.fillRect(innerX, innerY, innerW, topH);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
 
-  if (ticketArtImg) {
-    ctx.drawImage(ticketArtImg, innerX, innerY, innerW, topH);
-  } else if (stadiumComposite) {
-    ctx.drawImage(stadiumComposite, innerX, innerY, innerW, topH);
-  } else {
-    if (mountainsImg) ctx.drawImage(mountainsImg, innerX, innerY, innerW, topH);
-    if (skylineImg) ctx.drawImage(skylineImg, innerX, innerY + topH * 0.2, innerW, topH * 0.58);
-    if (leftImg) ctx.drawImage(leftImg, innerX, innerY + topH * 0.28, innerW * 0.5, topH * 0.6);
-    if (rightImg) ctx.drawImage(rightImg, innerX + innerW * 0.5, innerY + topH * 0.28, innerW * 0.5, topH * 0.6);
-    if (endzoneImg) ctx.drawImage(endzoneImg, innerX + innerW * 0.18, innerY + topH * 0.34, innerW * 0.64, topH * 0.52);
-    if (fieldImg) ctx.drawImage(fieldImg, innerX, innerY + topH * 0.63, innerW, topH * 0.45);
-  }
+  let cursorY = MAIN_BLOCK.y + 30;
+  const leftX = MAIN_BLOCK.x + 24;
+  const contentW = MAIN_BLOCK.w - 48;
+
+  ctx.fillStyle = COLOR_GREY;
+  ctx.font = '700 36px ' + FONT_STACK;
+  ctx.fillText('Share-Hawk No.', leftX, cursorY);
+
+  cursorY += 52;
+  ctx.fillStyle = COLOR_WHITE;
+  ctx.font = '700 72px ' + FONT_STACK;
+  ctx.fillText(displayNumber, leftX, cursorY);
+
+  cursorY += 110;
+  ctx.fillStyle = COLOR_GREY;
+  ctx.font = '700 28px ' + FONT_STACK;
+  cursorY = drawWrapped("You're on the hook for", leftX, cursorY, contentW, 34, 2) + 6;
+
+  ctx.fillStyle = COLOR_GREEN;
+  ctx.font = '700 58px ' + FONT_STACK;
+  ctx.fillText(perShareDisplay, leftX, cursorY);
+
+  cursorY += 92;
+  ctx.fillStyle = COLOR_WHITE;
+  ctx.font = '700 24px ' + FONT_STACK;
+  ctx.fillText('Date: ' + dateDisplay, leftX, cursorY);
+  cursorY += 34;
+  ctx.fillText('Time: ' + timeDisplay, leftX, cursorY);
   ctx.restore();
 
-  // Bold diagonal divider: blue / white / green.
-  const stripeRise = 48;
-  const stripeBand = 30;
-  const drawStripeBand = (offset, color) => {
-    const yL = dividerY - stripeRise + offset;
-    const yR = dividerY + stripeRise + offset;
-    ctx.beginPath();
-    ctx.moveTo(innerX, yL);
-    ctx.lineTo(innerX + innerW, yR);
-    ctx.lineTo(innerX + innerW, yR + stripeBand);
-    ctx.lineTo(innerX, yL + stripeBand);
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-  };
-  drawStripeBand(0, '#263c92');
-  drawStripeBand(stripeBand, '#ffffff');
-  drawStripeBand(stripeBand * 2, '#108040');
+  // Stub clerical block
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(STUB_BLOCK.x, STUB_BLOCK.y, STUB_BLOCK.w, STUB_BLOCK.h);
+  ctx.clip();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
 
-  // Bottom information area.
-  ctx.fillStyle = '#f7f8f6';
-  ctx.fillRect(innerX, infoY, innerW, infoH);
-  ctx.strokeStyle = '#c6cbd4';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(innerX + 1, infoY + 1, innerW - 2, infoH - 2);
+  let stubY = STUB_BLOCK.y + 18;
+  const stubX = STUB_BLOCK.x + 14;
+  const stubW = STUB_BLOCK.w - 24;
 
-  const centerX = innerX + innerW / 2;
-  const sectionTop = infoY + 84;
-  ctx.textAlign = 'center';
+  ctx.fillStyle = COLOR_GREY;
+  ctx.font = '700 14px ' + FONT_STACK;
+  ctx.fillText('SHARE-HAWK NO.', stubX, stubY);
+  stubY += 18;
 
-  ctx.fillStyle = '#263c92';
-  ctx.font = '700 38px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText('COMMUNITY OWNERSHIP PROPOSAL', centerX, sectionTop);
-  ctx.fillStyle = '#41598f';
-  ctx.font = '600 28px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText('Receipt of Intent', centerX, sectionTop + 50);
+  ctx.fillStyle = COLOR_WHITE;
+  ctx.font = '700 24px ' + FONT_STACK;
+  ctx.fillText(displayNumber, stubX, stubY);
+  stubY += 30;
 
-  ctx.fillStyle = '#263c92';
-  ctx.font = '700 30px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText('Share-Hawk Number', centerX, sectionTop + 150);
+  ctx.fillStyle = COLOR_GREY;
+  ctx.font = '700 13px ' + FONT_STACK;
+  stubY = drawWrapped("YOU'RE ON THE HOOK FOR", stubX, stubY, stubW, 16, 2);
 
-  ctx.fillStyle = '#108040';
-  ctx.font = '900 104px "Arial Black", "DIN Condensed", "Arial Narrow", Arial, sans-serif';
-  ctx.fillText(displayNumber, centerX, sectionTop + 258);
+  ctx.fillStyle = COLOR_GREEN;
+  ctx.font = '700 20px ' + FONT_STACK;
+  ctx.fillText(perShareDisplay, stubX, stubY + 2);
 
-  ctx.fillStyle = '#263c92';
-  ctx.font = '700 30px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText('Minimum Investment Commitment', centerX, sectionTop + 354);
-  ctx.font = '700 42px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText('Target Bid: $12,000,000,000', centerX, sectionTop + 412);
-
-  ctx.fillStyle = '#2d3f67';
-  ctx.font = '500 30px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText('This receipt documents your intent to participate in a', centerX, sectionTop + 520);
-  ctx.fillText('community bid to purchase the Seattle Seahawks.', centerX, sectionTop + 562);
-  ctx.fillText('Please hold onto this for your personal records.', centerX, sectionTop + 604);
-
-  ctx.fillStyle = '#4a5f8e';
-  ctx.font = '500 24px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText('An Extra Good Studio Production', centerX, sectionTop + 730);
-  ctx.fillText('extragood.studio', centerX, sectionTop + 766);
+  ctx.fillStyle = COLOR_WHITE;
+  ctx.font = '700 12px ' + FONT_STACK;
+  ctx.fillText('DATE ' + dateDisplay, stubX, STUB_BLOCK.y + STUB_BLOCK.h - 34);
+  ctx.fillText('TIME ' + timeDisplay, stubX, STUB_BLOCK.y + STUB_BLOCK.h - 18);
+  ctx.restore();
 
   const href = canvas.toDataURL('image/png');
   return { href, displayNumber };
@@ -2576,6 +3265,7 @@ function closeProposalReveal() {
     PROPOSAL_CONTENT.style.removeProperty('--proposal-content-bottom');
     PROPOSAL_CONTENT.scrollTop = 0;
   }
+  maybeShowFootball();
 }
 
 function resizeSignatureCanvas() {
@@ -2838,6 +3528,12 @@ async function triggerSharehawkCounterUpdate() {
     maybeFinalizeTicketUnlock();
   };
   try {
+    const supabaseStats = await insertGlobalParticipant();
+    if (supabaseStats) {
+      animateToStats(supabaseStats, 760, 1120, maybeUnlockTicket);
+      return;
+    }
+
     const res = await fetch('/api/commitments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3162,6 +3858,7 @@ function closeJumbotronOverlay() {
     JUMBOTRON_OVERLAY.setAttribute('aria-hidden', 'true');
     resetSharehawkImpactState();
     if (DEBUG_JUMBOTRON) BODY.classList.remove('debug-jumbotron');
+    maybeShowFootball();
     return;
   }
 
@@ -3177,6 +3874,7 @@ function closeJumbotronOverlay() {
     JUMBOTRON_OVERLAY.setAttribute('aria-hidden', 'true');
     resetSharehawkImpactState();
     if (DEBUG_JUMBOTRON) BODY.classList.remove('debug-jumbotron');
+    maybeShowFootball();
   }, 460);
 }
 
@@ -3211,22 +3909,27 @@ async function submitJoinCollective() {
   }
   if (JOIN_INLINE_ERROR) JOIN_INLINE_ERROR.textContent = '';
   try {
-    const res = await fetch('/api/commitments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ county: '' })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || 'Join failed.');
-    if (data?.stats) {
-      animateToStats(data.stats, 520);
+    const supabaseStats = await insertGlobalParticipant();
+    if (supabaseStats) {
+      animateToStats(supabaseStats, 520);
     } else {
-      const base = latestStats || { participantsCount: 0, equalShare: PURCHASE_PRICE };
-      const nextCount = base.participantsCount + 1;
-      animateToStats({
-        participantsCount: nextCount,
-        equalShare: PURCHASE_PRICE / Math.max(nextCount, 1)
-      }, 520);
+      const res = await fetch('/api/commitments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ county: '' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Join failed.');
+      if (data?.stats) {
+        animateToStats(data.stats, 520);
+      } else {
+        const base = latestStats || { participantsCount: 0, equalShare: PURCHASE_PRICE };
+        const nextCount = base.participantsCount + 1;
+        animateToStats({
+          participantsCount: nextCount,
+          equalShare: PURCHASE_PRICE / Math.max(nextCount, 1)
+        }, 520);
+      }
     }
   } catch {
     const base = latestStats || { participantsCount: 0, equalShare: PURCHASE_PRICE };
@@ -3306,6 +4009,7 @@ async function ensureProposalAssets() {
 }
 
 async function runProposalReveal() {
+  markFieldGoalInteraction('proposal');
   if (!STADIUM_FRAME_MASK || !PROPOSAL_REVEAL_LAYER || !PROPOSAL_HAWK || !PROPOSAL_CLOSED_SCROLL || !PROPOSAL_OPEN_SCROLL) {
     return;
   }
@@ -3542,11 +4246,93 @@ async function initSalmonFlyovers() {
 
 function toStats(raw) {
   const participantsCount = Math.max(0, Number(raw?.participantsCount || 0));
-  const equalShare = raw?.equalShare == null
-    ? PURCHASE_PRICE / Math.max(participantsCount, 1)
-    : Number(raw.equalShare);
+  // Keep investment/share-hawk strictly derived from the global participant count.
+  const equalShare = PURCHASE_PRICE / Math.max(participantsCount, 1);
 
   return { participantsCount, equalShare };
+}
+
+function getSupabaseCredentials() {
+  const runtimeUrl = (window.__SUPABASE_URL || '').trim();
+  const runtimeKey = (window.__SUPABASE_KEY || window.__SUPABASE_ANON_KEY || '').trim();
+  const bodyUrl = (document.body?.dataset?.supabaseUrl || '').trim();
+  const bodyKey = (document.body?.dataset?.supabaseAnonKey || '').trim();
+
+  return {
+    url: runtimeUrl || bodyUrl,
+    key: runtimeKey || bodyKey
+  };
+}
+
+function initSupabaseClient() {
+  const { url, key } = getSupabaseCredentials();
+  const createClient = window.supabase?.createClient;
+  if (!url || !key || !createClient) {
+    supabaseMode = false;
+    supabaseClient = null;
+    if (!supabaseWarnedMissingConfig) {
+      console.warn('[stats] Supabase config missing. Running in local fallback mode.');
+      supabaseWarnedMissingConfig = true;
+    }
+    return null;
+  }
+
+  if (!supabaseClient) {
+    supabaseClient = createClient(url, key);
+  }
+  supabaseMode = true;
+  return supabaseClient;
+}
+
+function statsFromParticipantCount(count) {
+  const participantsCount = Math.max(0, Number(count) || 0);
+  return {
+    participantsCount,
+    equalShare: PURCHASE_PRICE / Math.max(participantsCount, 1)
+  };
+}
+
+async function fetchGlobalParticipantsCount() {
+  const client = initSupabaseClient();
+  if (!client) return null;
+
+  const rpcRes = await client.rpc('get_participant_count');
+  if (!rpcRes.error && rpcRes.data != null) {
+    return Number(rpcRes.data || 0);
+  }
+
+  const { count, error } = await client
+    .from(SUPABASE_PARTICIPANTS_TABLE)
+    .select('id', { count: 'exact', head: true });
+
+  if (error) throw error;
+  return Number(count || 0);
+}
+
+async function loadGlobalStatsFromSupabase(duration = 250) {
+  const count = await fetchGlobalParticipantsCount();
+  if (count == null) return false;
+  animateToStats(statsFromParticipantCount(count), duration);
+  return true;
+}
+
+async function insertGlobalParticipant() {
+  const client = initSupabaseClient();
+  if (!client) return null;
+
+  if (supabaseInsertInFlight) {
+    return null;
+  }
+
+  supabaseInsertInFlight = true;
+  try {
+    const { error } = await client.from(SUPABASE_PARTICIPANTS_TABLE).insert({});
+    if (error) throw error;
+    const updatedCount = await fetchGlobalParticipantsCount();
+    return statsFromParticipantCount(updatedCount);
+  } finally {
+    supabaseInsertInFlight = false;
+  }
 }
 
 function renderStats(stats) {
@@ -3619,10 +4405,19 @@ function animateToStats(nextRaw, duration = 600, commitmentDuration = duration, 
 }
 
 async function loadStats() {
-  const res = await fetch('/api/stats');
-  if (!res.ok) throw new Error('Failed to load stats.');
-  const stats = await res.json();
-  animateToStats(stats, 250);
+  if (await loadGlobalStatsFromSupabase(250)) {
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/stats');
+    if (!res.ok) throw new Error('Failed to load stats.');
+    const stats = await res.json();
+    animateToStats(stats, 250);
+  } catch {
+    // Static deploy fallback keeps UI functional without server endpoints.
+    animateToStats(statsFromParticipantCount(latestStats?.participantsCount || 0), 250);
+  }
 }
 
 function loadCounties() {
@@ -3635,31 +4430,26 @@ function loadCounties() {
 }
 
 function initRealtime() {
-  const supabaseUrl = document.body.dataset.supabaseUrl;
-  const supabaseAnonKey = document.body.dataset.supabaseAnonKey;
-
-  if (!supabaseUrl || !supabaseAnonKey || !window.supabase?.createClient) {
+  const client = initSupabaseClient();
+  if (!client) {
     return;
   }
 
-  const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-
-  supabase
-    .channel('public-stats')
+  client
+    .channel('public-participants')
     .on(
       'postgres_changes',
       {
-        event: 'UPDATE',
+        event: 'INSERT',
         schema: 'public',
-        table: 'stats',
-        filter: 'id=eq.1'
+        table: SUPABASE_PARTICIPANTS_TABLE
       },
-      (payload) => {
-        const participantsCount = Number(payload?.new?.participants_count || 0);
-        animateToStats({
-          participantsCount,
-          equalShare: PURCHASE_PRICE / Math.max(participantsCount, 1)
-        });
+      async () => {
+        try {
+          await loadGlobalStatsFromSupabase(260);
+        } catch {
+          // Keep UI stable if realtime refresh fails intermittently.
+        }
       }
     )
     .subscribe();
@@ -3669,11 +4459,19 @@ FORM.addEventListener('submit', async (event) => {
   event.preventDefault();
   FORM_MESSAGE.textContent = '';
 
-  const payload = {
-    county: COUNTY_SELECT.value || undefined
-  };
-
   try {
+    const supabaseStats = await insertGlobalParticipant();
+    if (supabaseStats) {
+      animateToStats(supabaseStats);
+      FORM.reset();
+      FORM_MESSAGE.textContent = 'Anonymous commitment recorded.';
+      return;
+    }
+
+    const payload = {
+      county: COUNTY_SELECT.value || undefined
+    };
+
     const res = await fetch('/api/commitments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3748,6 +4546,7 @@ document.addEventListener('click', (event) => {
 if (JOIN_COLLECTIVE_BTN) {
   JOIN_COLLECTIVE_BTN.addEventListener('click', (event) => {
     event.preventDefault();
+    markFieldGoalInteraction('numbers');
     openJumbotronOverlay();
   });
 }
@@ -3757,6 +4556,38 @@ if (SHARE_HAWK_BTN) {
     event.preventDefault();
     if (sharehawkJoined) return;
     runSharehawkImpact();
+  });
+}
+
+if (FIELD_GOAL_LAUNCHER) {
+  FIELD_GOAL_LAUNCHER.addEventListener('click', (event) => {
+    event.preventDefault();
+    startFieldGoalGame();
+  });
+}
+
+if (FIELD_GOAL_CLOSE_BTN) {
+  FIELD_GOAL_CLOSE_BTN.addEventListener('click', (event) => {
+    event.preventDefault();
+    closeFieldGoalGame();
+  });
+}
+
+if (FIELD_GOAL_BALL) {
+  FIELD_GOAL_BALL.addEventListener('pointerdown', (event) => {
+    handleFieldGoalPointerDown(event);
+  });
+  FIELD_GOAL_BALL.addEventListener('pointermove', (event) => {
+    handleFieldGoalPointerMove(event);
+  });
+  FIELD_GOAL_BALL.addEventListener('pointerup', (event) => {
+    handleFieldGoalPointerUp(event);
+  });
+  FIELD_GOAL_BALL.addEventListener('pointercancel', () => {
+    handleFieldGoalPointerCancel();
+  });
+  FIELD_GOAL_BALL.addEventListener('lostpointercapture', () => {
+    handleFieldGoalPointerCancel();
   });
 }
 
@@ -3861,6 +4692,10 @@ if (JOIN_COMMIT_FORM) {
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
+  if (fieldGoalGameActive) {
+    closeFieldGoalGame();
+    return;
+  }
   if (isSubscribeOpen) {
     closeSubscribeWindow();
     return;
@@ -3902,6 +4737,8 @@ window.addEventListener('resize', updateBrokenGlassLayout);
 window.addEventListener('orientationchange', updateBrokenGlassLayout);
 window.addEventListener('resize', syncFXCanvasSize);
 window.addEventListener('orientationchange', syncFXCanvasSize);
+window.addEventListener('resize', syncFieldGoalGameLayout);
+window.addEventListener('orientationchange', syncFieldGoalGameLayout);
 if (window.ResizeObserver && STADIUM_FRAME_MASK) {
   const proposalOpenFrameObserver = new ResizeObserver(() => {
     updateUIScaleVar();
@@ -3910,6 +4747,7 @@ if (window.ResizeObserver && STADIUM_FRAME_MASK) {
     syncFXCanvasSize();
     refreshImpactPoint();
     positionJumbotronCloseButton();
+    syncFieldGoalGameLayout();
   });
   proposalOpenFrameObserver.observe(STADIUM_FRAME_MASK);
 }
@@ -3930,6 +4768,7 @@ async function init() {
   hydrateJumbotronBrokenState();
   hydrateWelcomeHeadingState();
   hydrateTicketUnlockedState();
+  hydrateFieldGoalProgressState();
   fxCelebrationPlayed = isCelebrationPlayed();
   initCelebrationFX();
   updateKickoffCountdown();
@@ -3953,6 +4792,7 @@ async function init() {
   renderStats({ participantsCount: 0, equalShare: PURCHASE_PRICE });
   await loadStats();
   initRealtime();
+  maybeShowFootball();
 }
 
 init().catch((err) => {

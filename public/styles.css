@@ -44,9 +44,12 @@
 
 html,
 body {
+  width: 100%;
+  max-width: 100%;
   height: 100vh;
   height: 100dvh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: hidden;
 }
 
 body {
@@ -89,10 +92,10 @@ body {
 }
 
 .stadiumViewport {
-  --frame-w: min(100vw, calc(100dvh * 9 / 16));
+  --frame-w: min(100%, calc(100dvh * 9 / 16));
   --frame-h: calc(var(--frame-w) * 16 / 9);
   --ui-scale: var(--frameScale);
-  --spare-x: max(0px, calc((100vw - var(--frame-w)) / 2));
+  --spare-x: max(0px, calc((100% - var(--frame-w)) / 2));
   --shell-radius: 48px;
   --band-outer-grey: 3px;
   --band-blue: 5px;
@@ -125,7 +128,7 @@ body {
   width: var(--frame-w);
   height: var(--frame-h);
   aspect-ratio: 9 / 16;
-  max-width: 100vw;
+  max-width: 100%;
   max-height: 100dvh;
 }
 
@@ -233,7 +236,7 @@ body {
   line-height: 0.96;
   letter-spacing: 0.05em;
   text-align: left;
-  text-transform: uppercase;
+  text-transform: none;
   opacity: 0;
   transform: translateY(-40px);
   white-space: normal;
@@ -637,7 +640,7 @@ body.ui-btn-labels-stacked .uiBtn__label {
   justify-content: flex-start;
   text-align: left;
   color: #263c92;
-  font-family: Verdana, "Trebuchet MS", "Segoe UI", sans-serif;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
   line-height: 1.55;
   letter-spacing: 0.005em;
   padding: clamp(18px, calc(34px * var(--ui-scale)), 44px);
@@ -663,12 +666,13 @@ body.ui-btn-labels-stacked .uiBtn__label {
 .proposal-title {
   margin: 0 0 clamp(8px, calc(16px * var(--ui-scale)), 22px);
   color: #263c92;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
   font-size: clamp(14px, calc(28px * var(--ui-scale)), 32px);
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.035em;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0.03em;
   line-height: 1.05;
+  text-align: center;
 }
 
 .proposal-subhead {
@@ -676,9 +680,10 @@ body.ui-btn-labels-stacked .uiBtn__label {
   color: #263c92;
   font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
   font-size: clamp(11px, calc(20px * var(--ui-scale)), 23px);
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1.14;
+  text-align: center;
 }
 
 .proposal-body {
@@ -699,6 +704,46 @@ body.ui-btn-labels-stacked .uiBtn__label {
   font-weight: 700;
   letter-spacing: 0.01em;
   line-height: 1.4;
+}
+
+.proposal-divider {
+  width: 100%;
+  border: 0;
+  border-top: 2px solid rgba(38, 60, 146, 0.35);
+  margin: clamp(10px, calc(18px * var(--ui-scale)), 24px) 0 clamp(8px, calc(14px * var(--ui-scale)), 18px);
+}
+
+.proposal-bullets {
+  margin: clamp(6px, calc(10px * var(--ui-scale)), 14px) 0 0;
+  padding-left: clamp(18px, calc(28px * var(--ui-scale)), 34px);
+  color: #108040;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-size: clamp(10px, calc(17px * var(--ui-scale)), 20px);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.proposal-bullets li + li {
+  margin-top: clamp(3px, calc(5px * var(--ui-scale)), 7px);
+}
+
+.proposal-brand {
+  margin-top: clamp(8px, calc(14px * var(--ui-scale)), 18px);
+  margin-left: auto;
+  text-align: right;
+  width: fit-content;
+  align-self: flex-end;
+}
+
+.proposal-logoLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.proposal-logo {
+  width: clamp(62px, calc(110px * var(--ui-scale)), 124px);
+  height: auto;
 }
 
 .proposal-link {
@@ -1150,6 +1195,345 @@ body.splash-complete .uiOverlay__headlineAlt {
 .ledChar--7 { transform: translateX(156%); animation-delay: 240ms; }
 .ledChar--8 { transform: translateX(190%); animation-delay: 280ms; }
 
+.fgScoreboardStatus {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(2px, calc(4px * var(--ui-scale)), 6px);
+  pointer-events: none;
+  z-index: 7;
+}
+
+.fgScoreboardStatus__title {
+  color: #ffffff;
+  font-family: "Press Start 2P", "VT323", monospace;
+  font-size: clamp(10px, calc(18px * var(--ui-scale)), 20px);
+  text-transform: uppercase;
+  text-shadow: 0 2px 0 #1a2d63;
+}
+
+.fgScoreboardStatus__label {
+  color: #ffe95a;
+  font-family: "Press Start 2P", "VT323", monospace;
+  font-size: clamp(7px, calc(11px * var(--ui-scale)), 12px);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fgScoreboardStatus__count {
+  color: #69BE28;
+  font-family: "Scoreboard60s", "Press Start 2P", "VT323", monospace;
+  font-size: clamp(10px, calc(18px * var(--ui-scale)), 24px);
+  letter-spacing: 0.04em;
+  text-shadow:
+    0 0 1px #69BE28,
+    0 0 4px rgba(105, 190, 40, 0.8);
+}
+
+body.field-goal-success .ledOverlay .ledChar {
+  opacity: 0;
+}
+
+body.field-goal-success .fgScoreboardStatus {
+  display: flex;
+}
+
+.fieldGoalLauncher {
+  position: absolute;
+  top: 18%;
+  right: 8%;
+  width: clamp(44px, calc(64px * var(--ui-scale)), 76px);
+  height: clamp(44px, calc(64px * var(--ui-scale)), 76px);
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  z-index: 176;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  animation: none;
+  filter: drop-shadow(0 0 12px rgba(0, 180, 255, 0.7));
+}
+
+.fieldGoalLauncher__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  pointer-events: none;
+}
+
+body.fg-launcher-visible:not(.fg-game-active):not(.proposal-open):not(.jumbotron-open):not(.subscribe-open):not(.receipt-preview-open) .fieldGoalLauncher {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  animation: fgFloat 2.5s ease-in-out infinite;
+}
+
+body.fg-launcher-pop.fg-launcher-visible:not(.fg-game-active):not(.proposal-open):not(.jumbotron-open):not(.subscribe-open):not(.receipt-preview-open) .fieldGoalLauncher {
+  animation: fgUnlockPop 460ms cubic-bezier(0.18, 0.62, 0.35, 1) 1, fgFloat 2.5s ease-in-out 460ms infinite;
+}
+
+.fieldGoalGameOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 231;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  touch-action: none;
+}
+
+body.fg-game-active .fieldGoalGameOverlay {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+body.fg-game-active .uiOverlay__actions,
+body.fg-game-active .claimShareBtn,
+body.fg-game-active .fieldGoalLauncher,
+body.fg-game-active .uiOverlay__headline,
+body.fg-game-active .uiOverlay__headlineAlt {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.fieldGoalInstruction {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  transform: translate(-50%, -50%);
+  color: #ffffff;
+  font-family: "Press Start 2P", "VT323", monospace;
+  font-size: clamp(9px, calc(16px * var(--ui-scale)), 20px);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 0 #1a2d63;
+  padding: clamp(4px, calc(8px * var(--ui-scale)), 10px) clamp(8px, calc(14px * var(--ui-scale)), 18px);
+  background: rgba(7, 12, 25, 0.7);
+  border: 2px solid rgba(38, 60, 146, 0.95);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 234;
+  transition: opacity 160ms ease;
+}
+
+body.fg-instruction .fieldGoalInstruction {
+  opacity: 1;
+  visibility: visible;
+}
+
+.fieldGoalPostGlow {
+  position: absolute;
+  left: 50%;
+  top: 60%;
+  width: clamp(120px, calc(200px * var(--ui-scale)), 240px);
+  height: clamp(80px, calc(130px * var(--ui-scale)), 170px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, rgba(255, 220, 80, 0.34) 0%, rgba(255, 220, 80, 0.08) 48%, rgba(255, 220, 80, 0) 76%);
+  filter: saturate(1.2);
+}
+
+body.fg-game-active .fieldGoalPostGlow {
+  opacity: 1;
+  animation: fgPostGlow 1600ms ease-in-out infinite;
+}
+
+.fieldGoalMeter {
+  position: absolute;
+  left: 50%;
+  top: 92%;
+  width: clamp(180px, calc(330px * var(--ui-scale)), 380px);
+  transform: translateX(-50%);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease;
+  --fg-meter-color: #69be28;
+}
+
+body.fg-meter-active .fieldGoalMeter {
+  opacity: 1;
+  visibility: visible;
+}
+
+.fieldGoalMeter__label {
+  margin-bottom: clamp(4px, calc(6px * var(--ui-scale)), 8px);
+  color: #ffffff;
+  font-family: "Press Start 2P", "VT323", monospace;
+  font-size: clamp(7px, calc(11px * var(--ui-scale)), 13px);
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-shadow: 0 1px 0 #1a2d63;
+}
+
+.fieldGoalMeter__track {
+  position: relative;
+  width: 100%;
+  height: clamp(16px, calc(24px * var(--ui-scale)), 28px);
+  display: flex;
+  border: 2px solid #0b1a43;
+  background: #101726;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+
+.fieldGoalMeter__track::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  bottom: 2px;
+  width: calc((100% - 4px) * var(--fg-meter-value, 0));
+  background: var(--fg-meter-color);
+  opacity: 0.7;
+  z-index: 1;
+}
+
+.fieldGoalMeter__zone {
+  height: 100%;
+  opacity: 0.26;
+}
+
+.fieldGoalMeter__zone--red {
+  width: 30%;
+  background: #db3d3d;
+}
+
+.fieldGoalMeter__zone--green {
+  width: 55%;
+  background: #69be28;
+}
+
+.fieldGoalMeter__zone--yellow {
+  width: 15%;
+  background: #f8d44a;
+}
+
+.fieldGoalMeter__indicator {
+  position: absolute;
+  top: -2px;
+  left: calc(var(--fg-meter-value, 0.5) * 100%);
+  width: clamp(8px, calc(12px * var(--ui-scale)), 14px);
+  height: calc(100% + 4px);
+  transform: translateX(-50%);
+  background: #ffffff;
+  box-shadow:
+    0 0 0 1px #0b1a43,
+    0 0 8px rgba(255, 255, 255, 0.45);
+  z-index: 2;
+}
+
+.fieldGoalMeter.is-red {
+  --fg-meter-color: #db3d3d;
+}
+
+.fieldGoalMeter.is-green {
+  --fg-meter-color: #69be28;
+}
+
+.fieldGoalMeter.is-yellow {
+  --fg-meter-color: #f8d44a;
+}
+
+body.fg-ball-ready .fieldGoalBall {
+  animation: fgBallIdle 540ms ease-in-out infinite;
+  pointer-events: auto;
+  cursor: grab;
+}
+
+body.fg-ball-held .fieldGoalBall {
+  animation: none;
+  cursor: grabbing;
+  filter: brightness(1.14) drop-shadow(0 0 6px rgba(255, 255, 255, 0.42));
+}
+
+.fieldGoalBall {
+  position: absolute;
+  width: clamp(28px, calc(52px * var(--ui-scale)), 64px);
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  transform: translate3d(-9999px, -9999px, 0);
+  opacity: 0;
+  pointer-events: none;
+  touch-action: none;
+  will-change: transform;
+  transition: filter 120ms ease, opacity 100ms ease;
+}
+
+body.fg-game-active .fieldGoalBall {
+  opacity: 1;
+}
+
+.fieldGoalResult {
+  position: absolute;
+  left: 50%;
+  top: 24%;
+  transform: translateX(-50%);
+  color: #ffffff;
+  font-family: "Press Start 2P", "VT323", monospace;
+  font-size: clamp(9px, calc(16px * var(--ui-scale)), 20px);
+  text-shadow: 0 2px 0 #1a2d63;
+  text-transform: uppercase;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+body.fg-game-active.fg-result-show .fieldGoalResult {
+  opacity: 1;
+}
+
+#fieldGoalCloseBtn {
+  position: absolute;
+  left: 3.2%;
+  bottom: 3.4%;
+  transform: translateY(0);
+  z-index: 232;
+}
+
+body.fg-game-active #fieldGoalCloseBtn {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+@keyframes fgUnlockPop {
+  0% { opacity: 0; transform: translateY(10px) scale(0.6); }
+  68% { opacity: 1; transform: translateY(-5px) scale(1.15); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes fgFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes fgPostGlow {
+  0%, 100% { opacity: 0.24; transform: translate(-50%, -50%) scale(0.98); }
+  50% { opacity: 0.52; transform: translate(-50%, -50%) scale(1.04); }
+}
+
+@keyframes fgBallIdle {
+  0%, 100% { transform: translate3d(var(--fg-ball-x, -9999px), var(--fg-ball-y, -9999px), 0) rotate(0deg); }
+  50% { transform: translate3d(var(--fg-ball-x, -9999px), calc(var(--fg-ball-y, -9999px) - 5px), 0) rotate(-5deg); }
+}
+
 #jumbotronOverlay {
   position: absolute;
   inset: 0;
@@ -1529,12 +1913,10 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  gap: clamp(8px, calc(12px * var(--ui-scale)), 14px);
+  justify-content: center;
   padding:
     clamp(10px, calc(18px * var(--ui-scale)), 22px)
-    clamp(12px, calc(20px * var(--ui-scale)), 24px)
-    calc(clamp(52px, calc(88px * var(--ui-scale)), 98px) + env(safe-area-inset-bottom, 0px));
+    clamp(12px, calc(20px * var(--ui-scale)), 24px);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -1542,9 +1924,8 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
 
 .receiptPreviewCard {
   position: relative;
-  flex: 1 1 auto;
   width: min(96%, 920px);
-  min-height: 0;
+  height: min(92%, 1760px);
   display: grid;
   place-items: center;
   opacity: 0;
@@ -1566,7 +1947,10 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
 }
 
 .receiptPreviewHint {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  bottom: clamp(8px, calc(14px * var(--ui-scale)), 18px);
+  transform: translateX(-50%);
   width: min(92%, 760px);
   min-height: clamp(28px, calc(42px * var(--ui-scale)), 48px);
   display: flex;
@@ -1618,6 +2002,7 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+  background: rgba(3, 9, 22, 0.36);
 }
 
 .subscribeOverlay__panel {
@@ -1626,40 +2011,168 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
   top: 50%;
   transform: translate(-50%, -50%);
   width: min(92%, 760px);
-  max-height: calc(100% - (128px * var(--ui-scale)));
+  max-height: calc(100% - clamp(116px, calc(154px * var(--ui-scale)), 164px));
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: clamp(10px, calc(14px * var(--ui-scale)), 18px);
-  padding: clamp(14px, calc(28px * var(--ui-scale)), 34px);
-  border: 2px solid #0f1f44;
-  background:
-    linear-gradient(180deg, rgba(250, 253, 255, 0.96), rgba(235, 241, 255, 0.95));
+  padding: clamp(14px, calc(26px * var(--ui-scale)), 32px);
+  border: 2px solid #0b132b;
+  background: linear-gradient(180deg, #040912 0%, #081731 100%);
   box-shadow:
-    0 0 0 1px #ffffff,
-    0 4px 0 #108040;
+    0 0 0 2px #263a7f,
+    0 0 0 4px #ffffff,
+    0 0 0 6px #108040,
+    0 12px 0 rgba(2, 8, 20, 0.84);
   overflow: hidden;
+  isolation: isolate;
+}
+
+.subscribeOverlay__panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.035) 0 1px,
+      rgba(0, 0, 0, 0) 1px 4px
+    );
+  opacity: 0.24;
+  z-index: 0;
+}
+
+.subscribeOverlay__panel::after {
+  content: "";
+  position: absolute;
+  inset: clamp(10px, calc(14px * var(--ui-scale)), 16px);
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+  opacity: 0.62;
+  z-index: 0;
+}
+
+.subscribeOverlay__panel > * {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+.subscribeOverlay__logoLink {
+  display: inline-flex;
+  width: auto;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+}
+
+.subscribeOverlay__logoLink:hover {
+  filter: brightness(1.08);
+}
+
+.subscribeOverlay__logo {
+  width: clamp(120px, 18vw, 180px);
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .subscribeOverlay__title {
   margin: 0;
-  color: #263c92;
+  color: #ffffff;
   font-family: "Press Start 2P", "VT323", monospace;
   font-size: clamp(12px, calc(22px * var(--ui-scale)), 26px);
   line-height: 1.2;
   text-align: center;
   text-transform: none;
+  text-shadow:
+    0 1px 0 rgba(20, 46, 104, 0.95),
+    0 2px 0 rgba(12, 26, 62, 0.95);
+}
+
+.subscribeOverlay__screen {
+  position: relative;
+  width: min(94%, 620px);
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(10px, calc(14px * var(--ui-scale)), 18px);
+  padding: clamp(10px, calc(16px * var(--ui-scale)), 22px);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: #020711;
+  box-shadow:
+    inset 0 0 0 1px rgba(16, 128, 64, 0.85),
+    inset 0 0 0 3px rgba(38, 58, 127, 0.9);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.subscribeOverlay__screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.05) 0 1px,
+      rgba(0, 0, 0, 0) 1px 3px
+    );
+  opacity: 0.2;
+  z-index: 0;
+}
+
+.subscribeOverlay__screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 36%);
+  opacity: 0.55;
+  z-index: 0;
+}
+
+.subscribeOverlay__screen > * {
+  position: relative;
+  z-index: 1;
 }
 
 .subscribeOverlay__body {
+  width: 100%;
   margin: 0;
-  color: #1b2e67;
+  color: #f2f6ff;
   font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
   font-size: clamp(10px, calc(15px * var(--ui-scale)), 19px);
   line-height: 1.5;
-  text-align: center;
-  text-wrap: balance;
+  text-align: left;
+  text-shadow: 0 0 2px rgba(105, 190, 40, 0.18);
+}
+
+.subscribeOverlay__body p {
+  margin: 0 0 clamp(8px, calc(12px * var(--ui-scale)), 14px);
+}
+
+.subscribeOverlay__body p:last-child {
+  margin-bottom: 0;
+}
+
+.subscribeOverlay__bodyLink {
+  color: #69be28;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.subscribeOverlay__bodyLink:hover {
+  filter: brightness(1.1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .subscribeOverlay__kitMount {
@@ -1669,42 +2182,12 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-top: auto;
+  padding-top: clamp(6px, calc(10px * var(--ui-scale)), 14px);
 }
 
 .subscribeOverlay__kitMount > * {
   width: 100%;
-}
-
-.subscribeOverlay__footer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: clamp(6px, calc(8px * var(--ui-scale)), 10px);
-}
-
-.subscribeOverlay__footerLink {
-  color: #263c92;
-  font-family: "Press Start 2P", "VT323", monospace;
-  font-size: clamp(8px, calc(11px * var(--ui-scale)), 13px);
-  line-height: 1.3;
-  text-decoration: none;
-  text-align: center;
-}
-
-.subscribeOverlay__footerLink:hover,
-.subscribeOverlay__logoLink:hover {
-  filter: brightness(1.08);
-}
-
-.subscribeOverlay__logoLink {
-  display: inline-flex;
-}
-
-.subscribeOverlay__logo {
-  width: clamp(130px, calc(210px * var(--ui-scale)), 250px);
-  height: auto;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
 }
 
 #subscribeCloseBtn {
@@ -2456,4 +2939,89 @@ body.ui-toast-show .uiToast {
     margin-right: auto;
   }
 
+}
+
+
+/* LED message overlay for field goal mini-game */
+.ledOverlay {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 120ms linear, visibility 120ms linear;
+}
+
+.ledOverlay--on {
+  opacity: 1;
+  visibility: visible;
+}
+
+.ledOverlay--off {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.ledOverlay--message {
+  align-items: center;
+  justify-content: flex-start;
+  gap: clamp(2px, calc(4px * var(--ui-scale)), 6px);
+}
+
+.ledOverlay__chars {
+  width: 100%;
+  height: 82%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ledOverlay--message .ledChar {
+  font-size: clamp(9px, calc(21px * var(--ui-scale)), 21px);
+  transform: none;
+  margin: 0;
+  animation-delay: var(--led-char-delay, 0ms);
+}
+
+.ledOverlay__score {
+  width: 100%;
+  margin-top: auto;
+  text-align: center;
+  color: #69BE28;
+  font-family: "Scoreboard60s", "Press Start 2P", "VT323", monospace;
+  font-size: clamp(10px, calc(18px * var(--ui-scale)), 22px);
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-shadow:
+    0 0 1px #69BE28,
+    0 0 4px rgba(105, 190, 40, 0.8),
+    0 0 9px rgba(105, 190, 40, 0.4);
+}
+
+.fgScoreboardStatus {
+  display: none !important;
+}
+
+body.field-goal-success .ledOverlay .ledChar {
+  opacity: 1;
+}
+
+/* Field goal mini-game heading */
+.fieldGoalHeading {
+  position: absolute;
+  left: 50%;
+  top: 5.4%;
+  width: min(92%, 980px);
+  margin: 0;
+  transform: translateX(-50%);
+  color: #ffffff;
+  font-family: "Press Start 2P", "VT323", "Courier New", monospace;
+  font-size: clamp(9px, calc(18px * var(--frameScale)), 26px);
+  line-height: 1.15;
+  letter-spacing: 0.055em;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow:
+    0 2px 0 #1a2d63,
+    0 4px 0 rgba(8, 14, 32, 0.65);
+  pointer-events: none;
+  z-index: 233;
 }

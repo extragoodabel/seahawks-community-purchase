@@ -70,7 +70,7 @@
                           />
                           <div class="sparkleRegion sparkleRegion--endzone-stands" aria-hidden="true"></div>
                           <div class="sparkleRegion sparkleRegion--tower-top" aria-hidden="true"></div>
-                          <div class="ledOverlay" aria-hidden="true">
+                          <div id="ledOverlayDefault" class="ledOverlay ledOverlay--default ledOverlay--on" aria-hidden="false">
                             <span class="ledChar ledChar--1">G</span>
                             <span class="ledChar ledChar--2">O</span>
                             <span class="ledChar ledChar--3">H</span>
@@ -79,6 +79,15 @@
                             <span class="ledChar ledChar--6">K</span>
                             <span class="ledChar ledChar--7">S</span>
                             <span class="ledChar ledChar--8">!</span>
+                          </div>
+                          <div id="ledOverlayMessage" class="ledOverlay ledOverlay--message ledOverlay--off" aria-hidden="true">
+                            <div id="ledOverlayMessageChars" class="ledOverlay__chars" aria-hidden="true"></div>
+                            <div id="ledOverlayMessageScore" class="ledOverlay__score" aria-live="polite">00</div>
+                          </div>
+                          <div id="fieldGoalScoreboardStatus" class="fgScoreboardStatus" aria-live="polite">
+                            <div class="fgScoreboardStatus__title">IT'S GOOD!</div>
+                            <div class="fgScoreboardStatus__label">FIELD GOALS MADE</div>
+                            <div id="fieldGoalCounter" class="fgScoreboardStatus__count">000,000</div>
                           </div>
                           <img class="layerAsset layerAsset--flag" src="/stadium/05-flag.png" alt="" aria-hidden="true" />
                         </div>
@@ -164,6 +173,28 @@
                       <div id="uiToast" class="uiToast" role="status" aria-live="polite"></div>
                     </div>
                     <div id="fieldWelcomeMsg" class="fieldWelcomeMsg" aria-live="polite">WELCOME TO THE TEAM!</div>
+                    <button id="fieldGoalLauncher" class="fieldGoalLauncher" type="button" aria-label="Play field goal game">
+                      <img class="fieldGoalLauncher__img" src="/assets/football.png" alt="" aria-hidden="true" />
+                    </button>
+                    <div id="fieldGoalGameOverlay" class="fieldGoalGameOverlay" aria-hidden="true">
+                      <div class="fieldGoalPostGlow" aria-hidden="true"></div>
+                      <h2 id="fieldGoalHeading" class="fieldGoalHeading">JASON MYERS SIMULATOR</h2>
+                      <div id="fieldGoalInstruction" class="fieldGoalInstruction">DRAG AND FLICK TO KICK</div>
+                      <img id="fieldGoalBall" class="fieldGoalBall" src="/assets/football.png" alt="" aria-hidden="true" />
+                      <div id="fieldGoalMeter" class="fieldGoalMeter" aria-hidden="true">
+                        <div class="fieldGoalMeter__label">POWER</div>
+                        <div class="fieldGoalMeter__track">
+                          <div class="fieldGoalMeter__zone fieldGoalMeter__zone--red"></div>
+                          <div class="fieldGoalMeter__zone fieldGoalMeter__zone--green"></div>
+                          <div class="fieldGoalMeter__zone fieldGoalMeter__zone--yellow"></div>
+                          <div id="fieldGoalMeterIndicator" class="fieldGoalMeter__indicator"></div>
+                        </div>
+                      </div>
+                      <div id="fieldGoalResult" class="fieldGoalResult" aria-live="polite"></div>
+                      <button id="fieldGoalCloseBtn" class="uiClose" type="button" aria-label="Close field goal game">
+                        <span class="uiClose__glyph" aria-hidden="true">X</span>
+                      </button>
+                    </div>
                     <button id="claimShareBtn" class="claimShareBtn" type="button" aria-label="Claim Your Share">
                       <img
                         class="claimShareBtn__img"
@@ -174,10 +205,10 @@
                     <div id="receiptPreviewOverlay" class="receiptPreviewOverlay" aria-hidden="true">
                       <div id="receiptPreviewCard" class="receiptPreviewCard">
                         <img id="receiptPreviewImage" class="receiptPreviewImage" alt="Share-hawk receipt preview" />
-                      </div>
-                      <div id="receiptPreviewHint" class="receiptPreviewHint" aria-live="polite">
-                        <span class="receiptPreviewHint__desktop">Click to download</span>
-                        <span class="receiptPreviewHint__mobile">Hold down to save</span>
+                        <div id="receiptPreviewHint" class="receiptPreviewHint" aria-live="polite">
+                          <span class="receiptPreviewHint__desktop">Click to download</span>
+                          <span class="receiptPreviewHint__mobile">Tap and hold ticket to save</span>
+                        </div>
                       </div>
                       <button id="receiptPreviewCloseBtn" class="uiClose" type="button" aria-label="Close receipt preview">
                         <span class="uiClose__glyph" aria-hidden="true">X</span>
@@ -185,19 +216,21 @@
                     </div>
                     <div id="subscribeOverlay" class="subscribeOverlay" aria-hidden="true">
                       <div class="subscribeOverlay__panel" role="dialog" aria-modal="true" aria-label="Subscribe for updates">
-                        <h3 class="subscribeOverlay__title">We're Serious. Are You?</h3>
-                        <p class="subscribeOverlay__body">
-                          If you'd like stay informed about the progress of this campaign, please sign up! Otherwise we won't know how to reach you when it's time to pay the bill.
-                        </p>
-                        <div id="kitSubscribeMount" class="subscribeOverlay__kitMount"></div>
-                        <footer class="subscribeOverlay__footer">
-                          <a class="subscribeOverlay__footerLink" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">
-                            This is an Extra Good Studio production
-                          </a>
-                          <a class="subscribeOverlay__logoLink" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">
-                            <img src="/assets/extragood-logo.png" alt="Extra Good Studio" class="subscribeOverlay__logo" />
-                          </a>
-                        </footer>
+                        <a class="subscribeOverlay__logoLink" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">
+                          <img src="/assets/extragood-logo.png" alt="Extra Good Studio" class="subscribeOverlay__logo" />
+                        </a>
+                        <h3 class="subscribeOverlay__title">Keeping Score..</h3>
+                        <div class="subscribeOverlay__screen">
+                          <div class="subscribeOverlay__body">
+                            <p>
+                              We're <a class="subscribeOverlay__bodyLink" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">Extra Good Studio</a>, a creative collective. And we're serious about collectively buying the Seahawks.
+                            </p>
+                            <p>We just need a few hundred thousand friends to help us.</p>
+                            <p>Join our mailing list if you want us to reach out to you when it's time to pay the bill.</p>
+                            <p>We will never spam you, sell your info, or share it with anyone.</p>
+                          </div>
+                          <div id="kitSubscribeMount" class="subscribeOverlay__kitMount"></div>
+                        </div>
                       </div>
                       <button id="subscribeCloseBtn" class="uiClose" type="button" aria-label="Close subscribe window">
                         <span class="uiClose__glyph" aria-hidden="true">X</span>
@@ -210,71 +243,66 @@
                       <article id="proposalContent" aria-label="Proposal content surface">
                         <h2 class="proposal-title">A Community Proposal</h2>
                         <p class="proposal-body">
-                          As directed by the will of the late, great Paul Allen, the Seahawks are to be sold, with proceeds benefiting charity. The franchise is expected to set a league record, with an estimated sale price between $7 and $10 billion.
+                          Under the will of the late Paul Allen, the Seahawks are to be sold, with proceeds benefiting charity. The sale is expected to set a league record, with estimates between $7 and $10 billion.
                         </p>
-                        <p class="proposal-emphasis">So let&rsquo;s aim higher.</p>
-                        <p class="proposal-emphasis">We intend to place a bid of $12 billion.</p>
-                        <p class="proposal-emphasis">Not from a billionaire.</p>
-                        <p class="proposal-emphasis">From everyone.</p>
+                        <p class="proposal-body"><strong>We propose to bid $12 billion.</strong></p>
+                        <p class="proposal-body">Not from a single billionaire. But from everyone.</p>
                         <p class="proposal-body">
-                          Inspired by the public ownership structure of the Green Bay Packers, we propose a collective bid, raised by the Seahawks community:
+                          This is a public interest proposal. We are not collecting funds. There is no legal or financial obligation. The goal is to measure interest and spark a conversation around a community ownership model for the 12s.
                         </p>
-                        <p class="proposal-emphasis">One share per person.</p>
-                        <p class="proposal-emphasis">Equal stake.</p>
-                        <p class="proposal-emphasis">Total cost divided evenly.</p>
-                        <p class="proposal-emphasis">No VIP class.</p>
-                        <p class="proposal-emphasis">No majority owner.</p>
-                        <p class="proposal-emphasis">No &ldquo;control interest.&rdquo;</p>
-                        <p class="proposal-emphasis">A team for the people, by the people, of the people.</p>
+                        <p class="proposal-body">
+                          Inspired by the Green Bay Packers model, we propose a collective structure:
+                        </p>
+                        <ul class="proposal-bullets">
+                          <li>One share per person.</li>
+                          <li>Equal stake.</li>
+                          <li>Total cost divided evenly.</li>
+                          <li>No VIP class.</li>
+                          <li>No majority owner.</li>
+                          <li>No controlling interest.</li>
+                          <li>A team of the people, by the people, for the people.</li>
+                        </ul>
 
-                        <h3 class="proposal-subhead">Let&rsquo;s Do the Math</h3>
+                        <hr class="proposal-divider" />
+                        <h3 class="proposal-subhead">The Math</h3>
+                        <p class="proposal-body">The mechanics are simple:</p>
+                        <p class="proposal-body">$12,000,000,000 divided by the number of shareholders.</p>
                         <p class="proposal-body">
-                          To own the team ourselves, we only need a mere $15,365.02 each from all 780,995 residents of Seattle. Alternatively, opening shares to all 8.1 million residents of Washington State would drop the commitment to an $1,478.72 per share. A remarkable bargain to own this historic, championship-winning team.
+                          If all 780,995 residents of Seattle participated, the cost per share would be a mere $15,365.02.
                         </p>
                         <p class="proposal-body">
-                          The more people who join, the lower the individual commitment goes.
+                          If all 8.1 million residents of Washington State joined, the number drops precipitously to $1,478.72 per share. It just makes sense.
                         </p>
+                        <p class="proposal-body">The more people involved, the lower the commitment.</p>
 
-                        <h3 class="proposal-subhead">For Perspective</h3>
+                        <hr class="proposal-divider" />
+                        <h3 class="proposal-subhead">Perspective</h3>
                         <p class="proposal-body">
-                          Paul Allen bought the Seahawks in 1997 for roughly $194 million.
+                          Paul Allen purchased the Seahawks in 1997 for roughly $194 million. At today's projected valuation, that represents a return north of 35 times the original investment.
                         </p>
-                        <p class="proposal-body">
-                          At today&rsquo;s projected valuation, that represents a return north of 35 times the original investment.
-                        </p>
-                        <p class="proposal-body">
-                          Now imagine what your share might be worth in 30 years.
-                        </p>
-                        <p class="proposal-body">
-                          That is, of course, if you ever chose to sell it.
-                        </p>
-                        <p class="proposal-body">
-                          Kickoff is only <span id="kickoffCountdownDays">--</span> days away. Will you be watching from your couch, or from the owner&rsquo;s suite?
-                        </p>
-                        <p class="proposal-emphasis">Join the collective bid TODAY!</p>
+                        <p class="proposal-body">Now imagine what your share could be worth in 30 years... (But who would ever sell?)</p>
+                        <p class="proposal-body">Kickoff is approaching. When the season opens, will you be watching as a fan, or as an owner?</p>
+                        <p class="proposal-emphasis">Join the Share-Hawks Collective.</p>
 
-                        <h3 class="proposal-subhead">The Necessary Fine Print</h3>
+                        <hr class="proposal-divider" />
+                        <h3 class="proposal-subhead">Participation</h3>
                         <p class="proposal-body">
-                          This proposal is conceptual. We are not collecting funds. No money is being solicited. No financial commitments are binding.
+                          Joining the Share-Hawks Collective does not obligate you to purchase anything. It signals interest in exploring a community bid.
                         </p>
                         <p class="proposal-body">
-                          If this were ever to become real, there would be lawyers. Many lawyers.
+                          Sharing your email is optional, but helpful if you want updates as this evolves. Also so we know how to reach you when the bill comes. We will use your email only for project-related communication.
                         </p>
                         <p class="proposal-body">
-                          Submitting your name does not obligate you to purchase anything. It simply signals interest in the idea of collective ownership.
+                          This project is not affiliated with the Seattle Seahawks organization, the NFL, or the Paul Allen estate.
                         </p>
                         <p class="proposal-body">
-                          That said &mdash; it would be fairly anticlimactic to enthusiastically pledge support and then disappear the moment someone hands you actual paperwork.
-                        </p>
-                        <p class="proposal-body">
-                          Email addresses are optional. If you choose to share one, it will be used solely for updates related to this project. We will not sell it, share it, trade it, lease it, or accidentally &ldquo;expose it in a CSV.&rdquo;
-                        </p>
-                        <p class="proposal-body">
-                          We are not affiliated with the Seattle Seahawks organization or the Paul Allen estate.
-                        </p>
-                        <p class="proposal-body">
-                          This project is an independent civic concept developed by
+                          It is an independent civic concept developed by
                           <a class="proposal-link" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">Extra Good Studio</a>.
+                        </p>
+                        <p class="proposal-body proposal-brand">
+                          <a class="proposal-logoLink" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">
+                            <img src="/assets/extragood-logo.png" alt="Extra Good Studio" class="proposal-logo" />
+                          </a>
                         </p>
                       </article>
                       <button id="proposalCloseBtn" class="uiClose" type="button" aria-label="Close proposal scroll">
@@ -363,6 +391,7 @@
     <!-- /FUTURE_COPY_DO_NOT_DELETE -->
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/config.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

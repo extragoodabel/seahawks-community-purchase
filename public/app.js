@@ -689,13 +689,20 @@ function renderJumbotronCommitmentValue(value, forceSplit = false) {
   }
 }
 
+function shouldSplitJumbotronCommitmentValue(value) {
+  if (!JUMBOTRON_COMMITMENT_VALUE) return false;
+  const splitValue = splitCommitmentForJumbotron(value);
+  if (!splitValue.split) return false;
+  if (JUMBOTRON_COMMITMENT_VALUE.clientWidth <= 1) return false;
+  return JUMBOTRON_COMMITMENT_VALUE.scrollWidth > (JUMBOTRON_COMMITMENT_VALUE.clientWidth + 1);
+}
+
 function setJumbotronCommitmentDisplay(value) {
   if (!JUMBOTRON_COMMITMENT_VALUE) return;
   renderJumbotronCommitmentValue(value, false);
   fitTextToContainer(JUMBOTRON_COMMITMENT_VALUE);
-  const overflow = JUMBOTRON_COMMITMENT_VALUE.scrollWidth > JUMBOTRON_COMMITMENT_VALUE.clientWidth
-    || JUMBOTRON_COMMITMENT_VALUE.scrollHeight > JUMBOTRON_COMMITMENT_VALUE.clientHeight;
-  if (overflow) {
+
+  if (shouldSplitJumbotronCommitmentValue(value)) {
     renderJumbotronCommitmentValue(value, true);
     fitTextToContainer(JUMBOTRON_COMMITMENT_VALUE);
   }

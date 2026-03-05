@@ -177,7 +177,10 @@
                     </div>
                     <div id="fieldWelcomeMsg" class="fieldWelcomeMsg" aria-live="polite">WELCOME TO THE TEAM!</div>
                     <button id="fieldGoalLauncher" class="fieldGoalLauncher" type="button" aria-label="Play field goal game">
-                      <img class="fieldGoalLauncher__img" src="/assets/football.png" alt="" aria-hidden="true" />
+                      <span class="fieldGoalLauncher__rig" aria-hidden="true">
+                        <img class="fieldGoalLauncher__hook" src="/assets/hook.png" alt="" aria-hidden="true" />
+                        <img class="fieldGoalLauncher__ball" src="/assets/football.png" alt="" aria-hidden="true" />
+                      </span>
                     </button>
                     <div id="fieldGoalGameOverlay" class="fieldGoalGameOverlay" aria-hidden="true">
                       <div class="fieldGoalPostGlow" aria-hidden="true"></div>
@@ -219,9 +222,6 @@
                     </div>
                     <div id="subscribeOverlay" class="subscribeOverlay" aria-hidden="true">
                       <div class="subscribeOverlay__panel" role="dialog" aria-modal="true" aria-label="Subscribe for updates">
-                        <a class="subscribeOverlay__logoLink" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">
-                          <img src="/assets/extragood-logo.png" alt="Extra Good Studio" class="subscribeOverlay__logo" />
-                        </a>
                         <h3 class="subscribeOverlay__title">Keep In Touch</h3>
                         <div class="subscribeOverlay__body">
                           <p>
@@ -231,6 +231,9 @@
                           <p>Join our mailing list if you want us to reach out to you when it's time to pay the bill.</p>
                           <p>We will never spam you, sell your info, or share it with anyone.</p>
                         </div>
+                        <a class="subscribeOverlay__logoLink subscribeOverlay__logoLink--signature" href="https://www.extragood.studio" target="_blank" rel="noopener noreferrer">
+                          <img src="/assets/extragood-logo.png" alt="Extra Good Studio" class="subscribeOverlay__logo" />
+                        </a>
                         <div class="subscribeOverlay__screen">
                           <div id="kitSubscribeMount" class="subscribeOverlay__kitMount"></div>
                         </div>

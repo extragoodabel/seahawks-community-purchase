@@ -302,6 +302,7 @@ let fieldGoalBallBaseWidth = 0;
 let fieldGoalBallCurrentX = 0;
 let fieldGoalBallCurrentY = 0;
 let fieldGoalInstructionTimerId = 0;
+let fieldGoalInstructionIntervalId = 0;
 let ledMessageTimerId = 0;
 let fieldGoalHintSeen = false;
 
@@ -376,7 +377,9 @@ const FIELD_GOAL_POWER_DISTANCE_RATIO = 0.26;
 const FIELD_GOAL_MIN_FLICK_DISTANCE = 18;
 const FIELD_GOAL_LED_MISS_DURATION_MS = 1000;
 const FIELD_GOAL_LED_SUCCESS_DURATION_MS = 1500;
-const FIELD_GOAL_INSTRUCTION_DURATION_MS = 1200;
+const FIELD_GOAL_INSTRUCTION_SEQUENCE = ["GRAB BALL", "PULL BACK", "SWIPE UP"];
+const FIELD_GOAL_INSTRUCTION_STEP_MS = 1000;
+const FIELD_GOAL_INSTRUCTION_CYCLES = 2;
 const FIELD_GOAL_POWER_RED_MAX = 0.30;
 const FIELD_GOAL_POWER_GREEN_MAX = 0.85;
 
@@ -1608,7 +1611,7 @@ function setLedOverlayVisibility(showDefault, showMessage) {
 
 function renderLedMessageChars(message = '') {
   if (!LED_MESSAGE_CHARS) return;
-  const chars = String(message || '').toUpperCase().replace(/\s+/g, ' ').slice(0, 12);
+  const chars = String(message || '').toUpperCase().replace(/\s+/g, ' ').slice(0, 16);
   LED_MESSAGE_CHARS.textContent = '';
   for (let i = 0; i < chars.length; i += 1) {
     const span = document.createElement('span');
@@ -1652,36 +1655,42 @@ function isHomeScreenVisibleForFieldGoal() {
 }
 
 function setFieldGoalLauncherVisible(active) {
-  fieldGoalLauncherVisible = !!active;
+  const nextVisible = !!active;
+  const wasVisible = fieldGoalLauncherVisible;
+  fieldGoalLauncherVisible = nextVisible;
   if (!BODY) return;
-  BODY.classList.toggle('fg-launcher-visible', fieldGoalLauncherVisible);
+  BODY.classList.toggle('fg-launcher-visible', nextVisible);
+
+  if (!nextVisible) {
+    BODY.classList.remove('fg-launcher-pop');
+    if (fieldGoalLauncherPopTimerId) {
+      clearTimeout(fieldGoalLauncherPopTimerId);
+      fieldGoalLauncherPopTimerId = 0;
+    }
+    return;
+  }
+
+  if (!wasVisible) {
+    runFieldGoalLauncherPop();
+  }
 }
 
-function runFieldGoalLauncherPopOnce() {
-  if (!BODY || fieldGoalLauncherShownYet) return;
-  fieldGoalLauncherShownYet = true;
+function runFieldGoalLauncherPop() {
+  if (!BODY) return;
   BODY.classList.add('fg-launcher-pop');
-  try {
-    sessionStorage.setItem(FIELD_GOAL_LAUNCHER_SHOWN_SESSION_KEY, '1');
-  } catch {
-    // no-op
-  }
   if (fieldGoalLauncherPopTimerId) {
     clearTimeout(fieldGoalLauncherPopTimerId);
   }
   fieldGoalLauncherPopTimerId = window.setTimeout(() => {
     fieldGoalLauncherPopTimerId = 0;
     BODY.classList.remove('fg-launcher-pop');
-  }, 560);
+  }, 1360);
 }
 
 function maybeShowFootball() {
   const canShow = fieldGoalUnlocked
     && isHomeScreenVisibleForFieldGoal();
   setFieldGoalLauncherVisible(canShow);
-  if (canShow) {
-    runFieldGoalLauncherPopOnce();
-  }
 }
 
 function setFieldGoalUnlocked(active) {
@@ -1817,29 +1826,32 @@ function setFieldGoalBallHeld(active) {
 }
 
 function clearFieldGoalInstructionTimer() {
-  if (!fieldGoalInstructionTimerId) return;
-  clearTimeout(fieldGoalInstructionTimerId);
-  fieldGoalInstructionTimerId = 0;
+  if (fieldGoalInstructionTimerId) {
+    clearTimeout(fieldGoalInstructionTimerId);
+    fieldGoalInstructionTimerId = 0;
+  }
+  if (fieldGoalInstructionIntervalId) {
+    clearInterval(fieldGoalInstructionIntervalId);
+    fieldGoalInstructionIntervalId = 0;
+  }
 }
 
-function showFieldGoalInstructionIfNeeded() {
-  if (fieldGoalHintSeen) {
-    setFieldGoalInstructionVisible(false);
-    return;
-  }
-  fieldGoalHintSeen = true;
-  try {
-    sessionStorage.setItem(FIELD_GOAL_HINT_SEEN_SESSION_KEY, '1');
-  } catch {
-    // no-op
-  }
-  setFieldGoalInstructionVisible(true);
+function showFieldGoalInstructionEveryOpen() {
+  setFieldGoalInstructionVisible(false);
   clearFieldGoalInstructionTimer();
-  fieldGoalInstructionTimerId = window.setTimeout(() => {
-    fieldGoalInstructionTimerId = 0;
-    setFieldGoalInstructionVisible(false);
-  }, FIELD_GOAL_INSTRUCTION_DURATION_MS);
+
+  const steps = FIELD_GOAL_INSTRUCTION_SEQUENCE;
+  if (!Array.isArray(steps) || !steps.length) return;
+
+  let stepIndex = 0;
+  setLedMessage(steps[0], 0);
+
+  fieldGoalInstructionIntervalId = window.setInterval(() => {
+    stepIndex = (stepIndex + 1) % steps.length;
+    setLedMessage(steps[stepIndex], 0);
+  }, FIELD_GOAL_INSTRUCTION_STEP_MS);
 }
+
 
 function stopFieldGoalKickAnimation() {
   if (!fieldGoalKickRafId) return;
@@ -1954,7 +1966,7 @@ function startFieldGoalGame() {
   setFieldGoalLedGameMode(true);
 
   prepareFieldGoalBallForKick();
-  showFieldGoalInstructionIfNeeded();
+  showFieldGoalInstructionEveryOpen();
 }
 
 function syncFieldGoalGameLayout() {
@@ -1971,10 +1983,12 @@ function queueNextFieldGoalKick(delayMs = 850) {
     setFieldGoalResult('');
     setLedMessage('');
     prepareFieldGoalBallForKick();
+    showFieldGoalInstructionEveryOpen();
   }, delayMs);
 }
 
 function handleFieldGoalSuccess() {
+  clearFieldGoalInstructionTimer();
   if (BODY) {
     BODY.classList.add('field-goal-success');
   }
@@ -1989,6 +2003,7 @@ function handleFieldGoalSuccess() {
 }
 
 function handleFieldGoalMiss(message) {
+  clearFieldGoalInstructionTimer();
   if (BODY) {
     BODY.classList.remove('field-goal-success');
   }
@@ -2140,9 +2155,12 @@ function handleFieldGoalPointerUp(event) {
 
   setFieldGoalBallHeld(false);
   setFieldGoalMeterActive(false);
+  clearFieldGoalInstructionTimer();
+  setLedMessage('');
 
   if (swipeDy < 12 || drag.rawDistance < FIELD_GOAL_MIN_FLICK_DISTANCE) {
     prepareFieldGoalBallForKick();
+    showFieldGoalInstructionEveryOpen();
     return;
   }
 

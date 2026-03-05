@@ -786,7 +786,8 @@ body.ui-btn-labels-stacked .uiBtn__label {
   border: 2px solid #0f1f44;
   background: #263c92;
   color: #fff;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: var(--close-glyph-size);
   line-height: 1;
   box-shadow: 0 0 0 1px #fff;
@@ -1211,7 +1212,8 @@ body.splash-complete .uiOverlay__headlineAlt {
 
 .fgScoreboardStatus__title {
   color: #ffffff;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(10px, calc(18px * var(--ui-scale)), 20px);
   text-transform: uppercase;
   text-shadow: 0 2px 0 #1a2d63;
@@ -1219,7 +1221,8 @@ body.splash-complete .uiOverlay__headlineAlt {
 
 .fgScoreboardStatus__label {
   color: #ffe95a;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(7px, calc(11px * var(--ui-scale)), 12px);
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1244,11 +1247,12 @@ body.field-goal-success .fgScoreboardStatus {
 }
 
 .fieldGoalLauncher {
+  --fg-launcher-base: clamp(18px, calc(64px * var(--ui-scale)), 76px);
   position: absolute;
-  top: 18%;
+  top: calc(18% - 35px);
   right: 8%;
-  width: clamp(44px, calc(64px * var(--ui-scale)), 76px);
-  height: clamp(44px, calc(64px * var(--ui-scale)), 76px);
+  width: calc(var(--fg-launcher-base) * 3);
+  height: calc(var(--fg-launcher-base) * 3);
   border: 0;
   background: transparent;
   padding: 0;
@@ -1259,16 +1263,61 @@ body.field-goal-success .fgScoreboardStatus {
   visibility: hidden;
   pointer-events: none;
   animation: none;
+  overflow: visible;
   filter: drop-shadow(0 0 12px rgba(0, 180, 255, 0.7));
 }
 
-.fieldGoalLauncher__img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+.fieldGoalLauncher__rig {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 33.333%;
+  height: 33.333%;
+  transform: translate(-50%, -50%);
+  display: inline-block;
+  pointer-events: none;
+}
+
+.fieldGoalLauncher__rig::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(-398% - 5px - 100vh);
+  width: clamp(1px, calc(2px * var(--ui-scale)), 3px);
+  height: calc(360% + 6px + 100vh);
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(232, 236, 255, 0.95) 0%, rgba(206, 214, 242, 0.92) 100%);
+  box-shadow: 0 0 1px rgba(180, 196, 255, 0.7);
+  z-index: 3;
+  pointer-events: none;
+}
+
+.fieldGoalLauncher__ball {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  width: 300%;
+  height: auto;
+  display: block;
+  transform: translate(-50%, -50%);
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  z-index: 1;
   pointer-events: none;
+}
+
+.fieldGoalLauncher__hook {
+  position: absolute;
+  left: 50%;
+  top: calc(-400% + 0px);
+  width: 165%;
+  height: auto;
+  transform: translateX(-50%) scaleX(1.14);
+  transform-origin: center top;
+  z-index: 2;
+  pointer-events: none;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 body.fg-launcher-visible:not(.fg-game-active):not(.proposal-open):not(.jumbotron-open):not(.subscribe-open):not(.receipt-preview-open) .fieldGoalLauncher {
@@ -1279,7 +1328,7 @@ body.fg-launcher-visible:not(.fg-game-active):not(.proposal-open):not(.jumbotron
 }
 
 body.fg-launcher-pop.fg-launcher-visible:not(.fg-game-active):not(.proposal-open):not(.jumbotron-open):not(.subscribe-open):not(.receipt-preview-open) .fieldGoalLauncher {
-  animation: fgUnlockPop 460ms cubic-bezier(0.18, 0.62, 0.35, 1) 1, fgFloat 2.5s ease-in-out 460ms infinite;
+  animation: fgUnlockPop 1280ms cubic-bezier(0.2, 0.82, 0.26, 1) 1 both, fgFloat 2.5s ease-in-out 1280ms infinite;
 }
 
 .fieldGoalGameOverlay {
@@ -1314,7 +1363,8 @@ body.fg-game-active .uiOverlay__headlineAlt {
   top: 44%;
   transform: translate(-50%, -50%);
   color: #ffffff;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(9px, calc(16px * var(--ui-scale)), 20px);
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1375,7 +1425,8 @@ body.fg-meter-active .fieldGoalMeter {
 .fieldGoalMeter__label {
   margin-bottom: clamp(4px, calc(6px * var(--ui-scale)), 8px);
   color: #ffffff;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(7px, calc(11px * var(--ui-scale)), 13px);
   letter-spacing: 0.08em;
   text-align: center;
@@ -1487,7 +1538,8 @@ body.fg-game-active .fieldGoalBall {
   top: 24%;
   transform: translateX(-50%);
   color: #ffffff;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(9px, calc(16px * var(--ui-scale)), 20px);
   text-shadow: 0 2px 0 #1a2d63;
   text-transform: uppercase;
@@ -1515,8 +1567,8 @@ body.fg-game-active #fieldGoalCloseBtn {
 }
 
 @keyframes fgUnlockPop {
-  0% { opacity: 0; transform: translateY(10px) scale(0.6); }
-  68% { opacity: 1; transform: translateY(-5px) scale(1.15); }
+  0% { opacity: 1; transform: translateY(-120vh) scale(1); }
+  72% { opacity: 1; transform: translateY(8px) scale(1); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -1809,7 +1861,8 @@ body.jumbotron-open .uiOverlay__headlineAlt {
   transform: translateX(-50%) translateY(6px);
   width: min(88%, 720px);
   text-align: center;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(12px, calc(24px * var(--ui-scale)), 30px);
   letter-spacing: 0.05em;
   line-height: 1.08;
@@ -2065,6 +2118,16 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
   text-decoration: none;
 }
 
+.subscribeOverlay__logoLink--signature {
+  align-self: flex-end;
+  margin-left: auto;
+  margin-right: clamp(2px, calc(4px * var(--ui-scale)), 6px);
+  margin-top: clamp(2px, calc(4px * var(--ui-scale)), 6px);
+  margin-bottom: clamp(2px, calc(4px * var(--ui-scale)), 6px);
+  padding: clamp(10px, calc(14px * var(--ui-scale)), 18px);
+  border: 1px solid transparent;
+}
+
 .subscribeOverlay__logoLink:hover {
   filter: brightness(1.06);
 }
@@ -2080,7 +2143,8 @@ body.jumbotron-open.ticket-unlocked .claimShareBtn {
 .subscribeOverlay__title {
   margin: 0;
   color: #ffffff;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(12px, calc(21px * var(--ui-scale)), 25px);
   line-height: 1.2;
   text-align: center;
@@ -2537,7 +2601,8 @@ body.ui-toast-show .uiToast {
   background: #ff7db8;
   border-bottom: 3px solid #111;
   color: #fefefe;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(0.45rem, 0.7vw, 0.62rem) !important;
   letter-spacing: 1px;
   text-align: center;
@@ -2549,7 +2614,8 @@ body.ui-toast-show .uiToast {
 .module h2 {
   margin: 0 0 10px;
   color: var(--blue);
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(0.8rem, 1.45vw, 1.1rem);
   line-height: 1.5;
   text-transform: uppercase;
@@ -2578,7 +2644,8 @@ body.ui-toast-show .uiToast {
 .callout p {
   margin: 0;
   color: #ffcc67;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(0.58rem, 0.95vw, 0.72rem);
   line-height: 1.7;
   text-transform: uppercase;
@@ -2704,7 +2771,8 @@ body.ui-toast-show .uiToast {
     repeating-linear-gradient(to right, rgba(0, 0, 0, 0.08) 0 10px, rgba(0, 0, 0, 0.14) 10px 14px),
     linear-gradient(180deg, #694c14 0%, #412d08 100%);
   color: #ffd06b;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(0.5rem, 0.78vw, 0.68rem);
   line-height: 1.5;
   text-align: center;
@@ -2746,7 +2814,8 @@ body.ui-toast-show .uiToast {
   margin: 2px 0 0;
   width: 100%;
   color: #8fd0f2;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(0.44rem, 0.68vw, 0.58rem);
   line-height: 1.7;
   text-transform: uppercase;
@@ -2757,7 +2826,8 @@ body.ui-toast-show .uiToast {
   margin: auto 0 0;
   width: 100%;
   color: #108040;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(0.82rem, 1.45vw, 1.3rem);
   line-height: 1.45;
   letter-spacing: 0.7px;
@@ -2791,7 +2861,8 @@ body.ui-toast-show .uiToast {
 
 .scoreboard-cta p {
   margin: 0 !important;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: clamp(0.5rem, 0.8vw, 0.64rem) !important;
   text-transform: uppercase;
   letter-spacing: 0.6px;
@@ -2810,7 +2881,8 @@ body.ui-toast-show .uiToast {
 .future-copy-block label {
   display: grid;
   gap: 4px;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: 0.6rem;
   line-height: 1.55;
   text-transform: uppercase;
@@ -2836,7 +2908,8 @@ body.ui-toast-show .uiToast {
   background: var(--blue);
   color: var(--white);
   cursor: pointer;
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: 0.68rem;
   text-transform: uppercase;
   box-shadow: 3px 3px 0 var(--green);
@@ -2856,7 +2929,8 @@ body.ui-toast-show .uiToast {
 .form-message {
   min-height: 1.2em;
   color: var(--green);
-  font-family: "Press Start 2P", "VT323", monospace;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-weight: 700;
   font-size: 0.6rem;
   line-height: 1.55;
   text-transform: uppercase;

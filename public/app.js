@@ -298,14 +298,19 @@ let perfDomReadyAt = 0;
 let perfInitIdleAt = 0;
 let perfSharehawkTapAt = 0;
 let perfLongTaskObserver = null;
-let bootLoaderShowTimerId = 0;
 let bootLoaderHardCapTimerId = 0;
 let bootLoaderShown = false;
 let bootLoaderVisible = false;
 let bootPreloadCompleted = false;
-let bootInteractiveReady = false;
 let bootPreloadStartedAt = 0;
 let bootPreloadPromise = null;
+let bootLoaderShownAt = 0;
+let bootAssetsReadyAt = 0;
+let bootLoaderDismissedAt = 0;
+let bootGateReleased = false;
+let bootSceneStartPending = false;
+let bootSceneStartSource = '';
+let bootSceneStarted = false;
 let fieldGoalUnlocked = false;
 let fieldGoalPlayed = false;
 let fieldGoalGameActive = false;
@@ -437,9 +442,18 @@ const FIELD_GOAL_SHORT_BOUNCE_MS = 340;
 const FIELD_GOAL_SHORT_BOUNCE_MOBILE_POWER_MAX = 0.76;
 const FIELD_GOAL_SHORT_BOUNCE_MOBILE_Y_OFFSET = 0.035;
 const FIELD_GOAL_SHORT_BOUNCE_MOBILE_MIN_FLIGHT_MS = 700;
-const BOOT_LOADER_SHOW_DELAY_MS = 500;
-const BOOT_LOADER_HARD_CAP_MS = 4000;
+const BOOT_LOADER_MIN_HOLD_MS = 4500;
+const BOOT_LOADER_HARD_CAP_MS = 8000;
 const BOOT_PRELOAD_IMAGE_URLS = [
+  '/stadium/01-mountains.png',
+  '/stadium/02-skyline.png',
+  '/stadium/03-stadium-left.png',
+  '/stadium/04-stadium-right.png',
+  '/stadium/05-flag.png',
+  '/stadium/06-endzone-base.png',
+  '/stadium/07-field.png',
+  '/assets/little-screens.png',
+  '/assets/little-screens-12.png',
   '/assets/football.png',
   '/assets/broken-glass.png',
   '/assets/ticket-template.png',
@@ -680,26 +694,42 @@ function setBootLoaderVisible(visible) {
   bootLoaderVisible = visible;
   BOOT_LOADER.classList.toggle('bootLoader--on', visible);
   BOOT_LOADER.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  if (BODY) {
+    BODY.classList.toggle('boot-hold', visible);
+  }
   if (visible) {
     bootLoaderShown = true;
+    if (!bootLoaderShownAt) {
+      bootLoaderShownAt = performance.now();
+    }
   }
 }
 
 function clearBootLoaderTimers() {
-  if (bootLoaderShowTimerId) {
-    window.clearTimeout(bootLoaderShowTimerId);
-    bootLoaderShowTimerId = 0;
-  }
   if (bootLoaderHardCapTimerId) {
     window.clearTimeout(bootLoaderHardCapTimerId);
     bootLoaderHardCapTimerId = 0;
   }
 }
 
-function hideBootLoader(reason = 'ready') {
+function releaseBootLoaderGate(reason = 'ready') {
+  if (bootGateReleased) return;
+  bootGateReleased = true;
+  bootLoaderDismissedAt = performance.now();
+  clearBootLoaderTimers();
   setBootLoaderVisible(false);
   if (DEBUG_PERF) {
-    perfLog('boot loader hidden', { reason, loaderDisplayed: bootLoaderShown });
+    perfLog('boot loader dismissed', {
+      reason,
+      shownAtMs: bootLoaderShownAt ? Math.round(bootLoaderShownAt) : null,
+      assetsReadyAtMs: bootAssetsReadyAt ? Math.round(bootAssetsReadyAt) : null,
+      dismissedAtMs: Math.round(bootLoaderDismissedAt)
+    });
+  }
+  if (bootSceneStartPending) {
+    window.setTimeout(() => {
+      requestSceneIntroStart(bootSceneStartSource || 'boot-gate-release');
+    }, 100);
   }
 }
 
@@ -742,53 +772,90 @@ function decodeBootImage(url) {
   });
 }
 
+function requestSceneIntroStart(source = 'load') {
+  if (bootSceneStarted) return;
+  if (!bootGateReleased) {
+    bootSceneStartPending = true;
+    bootSceneStartSource = source;
+    return;
+  }
+  bootSceneStartPending = false;
+  bootSceneStartSource = source;
+  bootSceneStarted = true;
+  if (DEBUG_PERF) {
+    perfLog('splash start', { atMs: Math.round(performance.now()), source });
+  }
+  initSceneIntro();
+}
+
 function startBootPreload() {
   if (bootPreloadPromise) return bootPreloadPromise;
 
   const urls = getBootPreloadImageUrls();
   bootPreloadStartedAt = performance.now();
-  perfLog('boot preload start', {
-    assetCount: urls.length,
-    assets: urls
+  setBootLoaderVisible(true);
+
+  if (DEBUG_PERF) {
+    perfLog('boot loader shown', { atMs: Math.round(bootLoaderShownAt || bootPreloadStartedAt) });
+    perfLog('boot preload start', {
+      assetCount: urls.length,
+      assets: urls
+    });
+  }
+
+  let minHoldComplete = false;
+  let criticalAssetsReady = false;
+
+  const maybeReleaseFromReadyState = () => {
+    if (!minHoldComplete || !criticalAssetsReady) return;
+    releaseBootLoaderGate('assets-ready+min-hold');
+  };
+
+  const minHoldPromise = wait(BOOT_LOADER_MIN_HOLD_MS).then(() => {
+    minHoldComplete = true;
+    maybeReleaseFromReadyState();
   });
 
-  bootLoaderShowTimerId = window.setTimeout(() => {
-    if (bootPreloadCompleted || bootInteractiveReady) return;
-    setBootLoaderVisible(true);
-    perfLog('boot loader shown', { delayMs: BOOT_LOADER_SHOW_DELAY_MS });
-  }, BOOT_LOADER_SHOW_DELAY_MS);
-
-  bootLoaderHardCapTimerId = window.setTimeout(() => {
-    hideBootLoader('hard-cap');
-  }, BOOT_LOADER_HARD_CAP_MS);
-
-  bootPreloadPromise = Promise.all(urls.map((url) => decodeBootImage(url)))
+  const assetsPromise = Promise.all(urls.map((url) => decodeBootImage(url)))
     .then((results) => {
       bootPreloadCompleted = true;
-      clearBootLoaderTimers();
+      bootAssetsReadyAt = performance.now();
       const failedUrls = results.filter((item) => !item.ok).map((item) => item.url);
-      const durationMs = Math.round(performance.now() - bootPreloadStartedAt);
-      perfLog('boot preload end', {
+      const durationMs = Math.round(bootAssetsReadyAt - bootPreloadStartedAt);
+      criticalAssetsReady = failedUrls.length === 0;
+      perfLog('boot assets ready', {
         durationMs,
-        loaderDisplayed: bootLoaderShown,
-        failedCount: failedUrls.length
+        failedCount: failedUrls.length,
+        allCriticalReady: criticalAssetsReady
       });
       if (failedUrls.length) {
         perfLog('boot preload failed assets', { urls: failedUrls });
       }
-      hideBootLoader('assets-ready');
+      maybeReleaseFromReadyState();
       return results;
     })
     .catch((error) => {
       bootPreloadCompleted = true;
-      clearBootLoaderTimers();
+      bootAssetsReadyAt = performance.now();
+      criticalAssetsReady = false;
       perfLog('boot preload failed', {
-        durationMs: Math.round(performance.now() - bootPreloadStartedAt),
+        durationMs: Math.round(bootAssetsReadyAt - bootPreloadStartedAt),
         error: String(error?.message || error)
       });
-      hideBootLoader('assets-error');
       return [];
     });
+
+  const hardCapPromise = new Promise((resolve) => {
+    bootLoaderHardCapTimerId = window.setTimeout(() => {
+      releaseBootLoaderGate('hard-cap');
+      resolve([]);
+    }, BOOT_LOADER_HARD_CAP_MS);
+  });
+
+  bootPreloadPromise = Promise.race([
+    Promise.all([assetsPromise, minHoldPromise]).then(([results]) => results),
+    hardCapPromise
+  ]);
 
   return bootPreloadPromise;
 }
@@ -5873,13 +5940,10 @@ if (window.ResizeObserver && STADIUM_FRAME_MASK) {
   proposalOpenFrameObserver.observe(STADIUM_FRAME_MASK);
 }
 
-if (document.readyState === 'complete') {
-  initSceneIntro();
-} else {
-  window.addEventListener('load', () => {
-    initSceneIntro();
-  }, { once: true });
-}
+requestSceneIntroStart('startup');
+window.addEventListener('load', () => {
+  requestSceneIntroStart('window-load');
+}, { once: true });
 
 async function init() {
   updateUIScaleVar();
@@ -5929,13 +5993,7 @@ initializePerfDomReadyMark();
 startBootPreload();
 
 init()
-  .then(() => {
-    bootInteractiveReady = true;
-    hideBootLoader('interactive-ready');
-  })
   .catch((err) => {
-    bootInteractiveReady = true;
-    hideBootLoader('init-error');
     console.error('[init] failed', err);
     if (FORM_MESSAGE) {
       FORM_MESSAGE.textContent = err.message;

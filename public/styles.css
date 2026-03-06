@@ -1531,13 +1531,13 @@ body.fg-ball-ready .fieldGoalBall {
   animation: fgBallIdle 540ms ease-in-out infinite;
   pointer-events: auto;
   cursor: grab;
-  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.34)) drop-shadow(0 0 2px rgba(18, 34, 82, 0.42));
+  filter: none;
 }
 
 body.fg-ball-held .fieldGoalBall {
   animation: none;
   cursor: grabbing;
-  filter: brightness(1.14) drop-shadow(0 0 6px rgba(255, 255, 255, 0.42));
+  filter: brightness(1.14);
 }
 
 .fieldGoalBall {
@@ -1552,6 +1552,36 @@ body.fg-ball-held .fieldGoalBall {
   touch-action: none;
   will-change: transform;
   transition: filter 120ms ease, opacity 100ms ease;
+  z-index: 2;
+}
+
+.fieldGoalBallShadow {
+  position: absolute;
+  width: var(--fg-ball-shadow-w, 28px);
+  height: var(--fg-ball-shadow-h, 6px);
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(var(--fg-ball-shadow-x, -9999px), var(--fg-ball-shadow-y, -9999px), 0) scale(1);
+  background: rgba(6, 10, 24, 0.36);
+  filter: blur(0.6px);
+  will-change: transform, opacity;
+  transition: opacity 100ms ease;
+  z-index: 1;
+}
+
+body.fg-ball-ready .fieldGoalBallShadow,
+body.fg-ball-held .fieldGoalBallShadow {
+  opacity: 1;
+}
+
+body.fg-ball-ready .fieldGoalBallShadow {
+  animation: fgBallShadowIdle 540ms ease-in-out infinite;
+}
+
+body.fg-ball-held .fieldGoalBallShadow {
+  animation: none;
+  transform: translate3d(var(--fg-ball-shadow-x, -9999px), var(--fg-ball-shadow-y, -9999px), 0) scale(0.88);
 }
 
 body.fg-game-active .fieldGoalBall {
@@ -1606,6 +1636,17 @@ body.fg-game-active #fieldGoalCloseBtn {
 @keyframes fgPostGlow {
   0%, 100% { opacity: 0.24; transform: translate(-50%, -50%) scale(0.98); }
   50% { opacity: 0.52; transform: translate(-50%, -50%) scale(1.04); }
+}
+
+@keyframes fgBallShadowIdle {
+  0%, 100% {
+    transform: translate3d(var(--fg-ball-shadow-x, -9999px), var(--fg-ball-shadow-y, -9999px), 0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translate3d(var(--fg-ball-shadow-x, -9999px), var(--fg-ball-shadow-y, -9999px), 0) scale(0.74);
+    opacity: 0.17;
+  }
 }
 
 @keyframes fgBallIdle {
@@ -3167,4 +3208,21 @@ body.field-goal-success .ledOverlay .ledChar {
   .bootLoader__label {
     font-size: 18px;
   }
+}
+
+.bootLoader__note {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(16px, calc(28px * var(--ui-scale)), 36px);
+  transform: translateX(-50%);
+  width: min(92%, 680px);
+  color: #ffffff;
+  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
+  font-size: clamp(10px, calc(12px * var(--ui-scale)), 14px);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1.25;
+  text-align: center;
+  text-transform: none;
+  opacity: 0.9;
 }

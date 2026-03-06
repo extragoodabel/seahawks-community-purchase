@@ -7,9 +7,8 @@
     <link rel="dns-prefetch" href="https://sugirphcfptqnzpxvrqm.supabase.co" />
     <title>Lets Buy the Seahawks</title>
     <link rel="icon" type="image/png" href="/assets/football.png" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" />
-    <link rel="preload" as="image" href="/stadium/01-mountains.png" />
-    <link rel="preload" as="image" href="/stadium/02-skyline.png" />
+        <link rel="preload" as="image" href="/stadium/01-mountains.png" />
+        <link rel="preload" as="image" href="/stadium/02-skyline.png" />
     <link rel="preload" as="image" href="/stadium/03-stadium-left.png" />
     <link rel="preload" as="image" href="/stadium/04-stadium-right.png" />
     <link rel="preload" as="image" href="/stadium/05-flag.png" />
@@ -17,6 +16,7 @@
     <link rel="preload" as="image" href="/stadium/07-field.png" />
     <link rel="preload" as="image" href="/assets/little-screens.png" />
     <link rel="preload" as="image" href="/assets/little-screens-12.png" />
+    <link rel="preload" as="image" href="/assets/broken-glass.png" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body class="splash-active" data-supabase-url="" data-supabase-anon-key="">
@@ -187,6 +187,7 @@
                       <h2 id="fieldGoalHeading" class="fieldGoalHeading">JASON MYERS SIMULATOR</h2>
                       <div id="fieldGoalInstruction" class="fieldGoalInstruction">DRAG AND FLICK TO KICK</div>
                       <img id="fieldGoalBall" class="fieldGoalBall" src="/assets/football.png" alt="" aria-hidden="true" />
+                      <div id="fieldGoalBallShadow" class="fieldGoalBallShadow" aria-hidden="true"></div>
                       <div id="fieldGoalMeter" class="fieldGoalMeter" aria-hidden="true">
                         <div class="fieldGoalMeter__label">POWER</div>
                         <div class="fieldGoalMeter__track">
@@ -388,7 +389,15 @@
       </footer>
     </main>
     <!-- /FUTURE_COPY_DO_NOT_DELETE -->
-
+    <div id="bootLoader" class="bootLoader" aria-hidden="true">
+      <div class="bootLoader__inner">
+        <img id="bootLoaderSpinner" class="bootLoader__spinner" src="/assets/football.png" alt="" aria-hidden="true" />
+        <div class="bootLoader__label">
+          <span class="bootLoader__labelWhite">LOAD</span><span class="bootLoader__labelGreen">ING</span>
+        </div>
+      </div>
+      <div class="bootLoader__note">full stadium experience is best on desktop</div>
+    </div>
     <div id="turnstileMount" aria-hidden="true" style="position: fixed; left: -9999px; top: -9999px; width: 1px; height: 1px; opacity: 0; pointer-events: none;"></div>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

@@ -78,6 +78,7 @@ const SHARE_BTN = document.getElementById('shareBtn');
 const FIELD_GOAL_LAUNCHER = document.getElementById('fieldGoalLauncher');
 const FIELD_GOAL_OVERLAY = document.getElementById('fieldGoalGameOverlay');
 const FIELD_GOAL_BALL = document.getElementById('fieldGoalBall');
+const FIELD_GOAL_BALL_SHADOW = document.getElementById('fieldGoalBallShadow');
 const FIELD_GOAL_METER = document.getElementById('fieldGoalMeter');
 const FIELD_GOAL_METER_INDICATOR = document.getElementById('fieldGoalMeterIndicator');
 const FIELD_GOAL_INSTRUCTION = document.getElementById('fieldGoalInstruction');
@@ -425,6 +426,8 @@ const FIELD_GOAL_USE_MOBILE_SWIPE = (('ontouchstart' in window || navigator.maxT
 const FIELD_GOAL_INSTRUCTION_STEP_MS = 1000;
 const FIELD_GOAL_POWER_RED_MAX = 0.30;
 const FIELD_GOAL_POWER_GREEN_MAX = 0.85;
+const FIELD_GOAL_DESKTOP_EDGE_EASE = 0.025;
+const FIELD_GOAL_DESKTOP_SHANK_MULTIPLIER = 0.9;
 const BOOT_LOADER_SHOW_DELAY_MS = 500;
 const BOOT_LOADER_HARD_CAP_MS = 4000;
 const BOOT_PRELOAD_IMAGE_URLS = [
@@ -2022,10 +2025,11 @@ function hydrateFieldGoalProgressState() {
   setFieldGoalLedGameMode(false);
 }
 
-function getFieldGoalZone(frameRect) {
+function getFieldGoalZone(frameRect, desktopAssist = false) {
+  const edgeEase = desktopAssist ? FIELD_GOAL_DESKTOP_EDGE_EASE : 0;
   return {
-    left: frameRect.width * 0.456,
-    right: frameRect.width * 0.544,
+    left: frameRect.width * (0.456 - edgeEase),
+    right: frameRect.width * (0.544 + edgeEase),
     top: frameRect.height * 0.545,
     bottom: frameRect.height * 0.705
   };
@@ -2038,6 +2042,12 @@ function resetFieldGoalBallVisual() {
   FIELD_GOAL_BALL.style.opacity = '0';
   FIELD_GOAL_BALL.style.removeProperty('--fg-ball-x');
   FIELD_GOAL_BALL.style.removeProperty('--fg-ball-y');
+  if (FIELD_GOAL_BALL_SHADOW) {
+    FIELD_GOAL_BALL_SHADOW.style.removeProperty('--fg-ball-shadow-x');
+    FIELD_GOAL_BALL_SHADOW.style.removeProperty('--fg-ball-shadow-y');
+    FIELD_GOAL_BALL_SHADOW.style.removeProperty('--fg-ball-shadow-w');
+    FIELD_GOAL_BALL_SHADOW.style.removeProperty('--fg-ball-shadow-h');
+  }
 }
 
 function setFieldGoalInstructionVisible(active) {
@@ -2151,6 +2161,17 @@ function setFieldGoalBallPosition(centerX, centerY, widthPx, rotationDeg = 0) {
   FIELD_GOAL_BALL.style.setProperty('--fg-ball-x', x.toFixed(2) + 'px');
   FIELD_GOAL_BALL.style.setProperty('--fg-ball-y', y.toFixed(2) + 'px');
   FIELD_GOAL_BALL.style.transform = 'translate3d(' + x.toFixed(2) + 'px, ' + y.toFixed(2) + 'px, 0) rotate(' + Number(rotationDeg || 0).toFixed(2) + 'deg)';
+
+  if (FIELD_GOAL_BALL_SHADOW) {
+    const shadowW = Math.max(10, w * 0.592);
+    const shadowH = Math.max(4, shadowW * 0.18);
+    const shadowX = centerX - shadowW * 0.5;
+    const shadowY = centerY + h * 0.42 - shadowH * 0.5;
+    FIELD_GOAL_BALL_SHADOW.style.setProperty('--fg-ball-shadow-x', shadowX.toFixed(2) + 'px');
+    FIELD_GOAL_BALL_SHADOW.style.setProperty('--fg-ball-shadow-y', shadowY.toFixed(2) + 'px');
+    FIELD_GOAL_BALL_SHADOW.style.setProperty('--fg-ball-shadow-w', shadowW.toFixed(2) + 'px');
+    FIELD_GOAL_BALL_SHADOW.style.setProperty('--fg-ball-shadow-h', shadowH.toFixed(2) + 'px');
+  }
 }
 
 function getFieldGoalDragOffset(point, frameRect) {
@@ -2303,11 +2324,13 @@ function runFieldGoalKickWithFlick(swipeAngle, power) {
   setFieldGoalMeterActive(false);
 
   const overpowered = clamp((power - FIELD_GOAL_POWER_GREEN_MAX) / (1 - FIELD_GOAL_POWER_GREEN_MAX), 0, 1);
-  const driftDeg = (Math.random() * 2 - 1) * (9 * overpowered);
+  const desktopAssist = !fieldGoalUseMobileSwipeActive;
+  const shankBase = desktopAssist ? (8.1 * FIELD_GOAL_DESKTOP_SHANK_MULTIPLIER) : 8.1;
+  const driftDeg = (Math.random() * 2 - 1) * (shankBase * overpowered);
   const finalAngle = swipeAngle + (driftDeg * (Math.PI / 180));
 
   const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
-  const zone = getFieldGoalZone(frameRect);
+  const zone = getFieldGoalZone(frameRect, desktopAssist);
   const speed = 520 + (power * 760);
   const vx = Math.cos(finalAngle) * speed;
   const liftAssist = power >= FIELD_GOAL_POWER_RED_MAX && power <= FIELD_GOAL_POWER_GREEN_MAX ? 1.08 : 1;
@@ -2432,7 +2455,7 @@ function handleFieldGoalPointerUp(event) {
 
   event.preventDefault();
   const startPoint = fieldGoalDragStartPoint;
-  const endPoint = getPointFromEvent(event) || fieldGoalDragCurrentPoint || startPoint;
+  const endPoint = fieldGoalDragCurrentPoint || getPointFromEvent(event) || startPoint;
   const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
   const elapsedMs = Math.max(16, performance.now() - fieldGoalDragStartAt);
   const activePointerId = fieldGoalPointerId;
@@ -2476,19 +2499,27 @@ function handleFieldGoalPointerUp(event) {
     combinedPower = clamp(distancePower * 0.75 + velocityNorm * 0.25, 0.08, 1);
   } else {
     const drag = getFieldGoalDragOffset(endPoint, frameRect);
+    const hasSwipeSignal = fieldGoalMiniGameState.hasSwiped && Number.isFinite(fieldGoalMiniGameState.swipeAngle);
     swipeDy = startPoint.y - endPoint.y;
-    swipeAngle = Math.atan2(swipeDy, drag.dx || 0);
+    swipeAngle = hasSwipeSignal ? fieldGoalMiniGameState.swipeAngle : Math.atan2(swipeDy, drag.dx || 0);
     rawDistance = drag.rawDistance;
 
-    if (swipeDy < 12 || rawDistance < FIELD_GOAL_MIN_FLICK_DISTANCE) {
+    if ((swipeDy < 12 || rawDistance < FIELD_GOAL_MIN_FLICK_DISTANCE) && !hasSwipeSignal) {
       prepareFieldGoalBallForKick();
       showFieldGoalInstructionEveryOpen();
       return;
     }
 
+    if (rawDistance < FIELD_GOAL_MIN_FLICK_DISTANCE && hasSwipeSignal) {
+      rawDistance = FIELD_GOAL_MIN_FLICK_DISTANCE;
+    }
+
     const distancePower = clamp(rawDistance / Math.max(1, frameRect.width * FIELD_GOAL_POWER_DISTANCE_RATIO), 0, 1);
     const velocityNorm = clamp((rawDistance / elapsedMs) / 1.15, 0, 1);
     combinedPower = clamp(distancePower * 0.75 + velocityNorm * 0.25, 0.08, 1);
+    if (hasSwipeSignal) {
+      combinedPower = Math.max(combinedPower, clamp(fieldGoalMeterValue, 0.08, 1));
+    }
   }
 
   fieldGoalMiniGameState.hasSwiped = true;
@@ -2514,6 +2545,29 @@ function handleFieldGoalPointerCancel() {
     prepareFieldGoalBallForKick();
     showFieldGoalInstructionEveryOpen();
   }
+}
+
+function handleFieldGoalLostPointerCapture(event) {
+  if (fieldGoalPointerId === null || !fieldGoalDragStartPoint || !fieldGoalGameActive || fieldGoalKickAnimating) {
+    handleFieldGoalPointerCancel();
+    return;
+  }
+
+  const frameRect = STADIUM_FRAME_MASK?.getBoundingClientRect();
+  const fallbackPoint = fieldGoalDragCurrentPoint || fieldGoalDragStartPoint;
+  const clientX = Number.isFinite(event?.clientX)
+    ? event.clientX
+    : (frameRect ? frameRect.left + fallbackPoint.x : fallbackPoint.x);
+  const clientY = Number.isFinite(event?.clientY)
+    ? event.clientY
+    : (frameRect ? frameRect.top + fallbackPoint.y : fallbackPoint.y);
+
+  handleFieldGoalPointerUp({
+    pointerId: fieldGoalPointerId,
+    clientX,
+    clientY,
+    preventDefault() {}
+  });
 }
 
 function isMobileReceiptSaveMode() {
@@ -5478,8 +5532,8 @@ if (FIELD_GOAL_BALL) {
   FIELD_GOAL_BALL.addEventListener('pointercancel', () => {
     handleFieldGoalPointerCancel();
   });
-  FIELD_GOAL_BALL.addEventListener('lostpointercapture', () => {
-    handleFieldGoalPointerCancel();
+  FIELD_GOAL_BALL.addEventListener('lostpointercapture', (event) => {
+    handleFieldGoalLostPointerCapture(event);
   });
 }
 

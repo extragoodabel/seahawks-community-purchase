@@ -713,9 +713,21 @@ body.ui-btn-labels-stacked .uiBtn__label {
   font-weight: 700;
 }
 
+.proposal-body--teamline {
+  margin-top: clamp(8px, calc(12px * var(--ui-scale)), 16px);
+  color: #263c92;
+  font-weight: 700;
+}
+
+.proposal-body--teamline,
+.proposal-body--mathline {
+  text-align: center;
+}
+
+
 .proposal-emphasis {
   margin: clamp(6px, calc(10px * var(--ui-scale)), 14px) 0 0;
-  color: #108040;
+  color: #263c92;
   font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
   font-size: clamp(10px, calc(17px * var(--ui-scale)), 20px);
   font-weight: 700;

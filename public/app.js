@@ -330,6 +330,7 @@ let fieldGoalInstructionTimerId = 0;
 let fieldGoalInstructionIntervalId = 0;
 let ledMessageTimerId = 0;
 let fieldGoalHintSeen = false;
+let fieldGoalUseMobileSwipeActive = false;
 
 const fieldGoalMiniGameState = {
   unlocked: false,
@@ -419,7 +420,8 @@ const FIELD_GOAL_LED_MISS_DURATION_MS = 1000;
 const FIELD_GOAL_LED_SUCCESS_DURATION_MS = 1500;
 const FIELD_GOAL_INSTRUCTION_SEQUENCE_DESKTOP = ["GRAB BALL", "PULL BACK", "SWIPE UP"];
 const FIELD_GOAL_INSTRUCTION_SEQUENCE_MOBILE = ["SWIPE TO KICK"];
-const FIELD_GOAL_USE_MOBILE_SWIPE = ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+const FIELD_GOAL_USE_MOBILE_SWIPE = (('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  && Boolean(window.matchMedia?.('(pointer: coarse)')?.matches));
 const FIELD_GOAL_INSTRUCTION_STEP_MS = 1000;
 const FIELD_GOAL_POWER_RED_MAX = 0.30;
 const FIELD_GOAL_POWER_GREEN_MAX = 0.85;
@@ -2182,6 +2184,7 @@ function prepareFieldGoalBallForKick() {
   fieldGoalMiniGameState.hasSwiped = false;
   fieldGoalMiniGameState.hasTapped = false;
   fieldGoalMiniGameState.swipeAngle = Math.PI / 2;
+  fieldGoalUseMobileSwipeActive = false;
   setFieldGoalMeterValue(0);
   setFieldGoalMeterActive(false);
   setFieldGoalBallHeld(false);
@@ -2371,6 +2374,7 @@ function handleFieldGoalPointerDown(event) {
 
   fieldGoalMiniGameState.hasSwiped = false;
   fieldGoalMiniGameState.hasTapped = false;
+  fieldGoalUseMobileSwipeActive = FIELD_GOAL_USE_MOBILE_SWIPE && event.pointerType !== 'mouse';
 
   setFieldGoalBallHeld(true);
   setFieldGoalMeterActive(true);
@@ -2394,7 +2398,7 @@ function handleFieldGoalPointerMove(event) {
 
   const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
 
-  if (FIELD_GOAL_USE_MOBILE_SWIPE) {
+  if (fieldGoalUseMobileSwipeActive) {
     const dx = point.x - fieldGoalDragStartPoint.x;
     const dy = point.y - fieldGoalDragStartPoint.y;
     const rawDistance = Math.hypot(dx, dy);
@@ -2423,7 +2427,8 @@ function handleFieldGoalPointerMove(event) {
 
 function handleFieldGoalPointerUp(event) {
   if (!fieldGoalGameActive || fieldGoalKickAnimating) return;
-  if (fieldGoalPointerId === null || event.pointerId !== fieldGoalPointerId || !fieldGoalDragStartPoint || !STADIUM_FRAME_MASK) return;
+  if (fieldGoalPointerId === null || !fieldGoalDragStartPoint || !STADIUM_FRAME_MASK) return;
+  if (event?.pointerId != null && event.pointerId !== fieldGoalPointerId) return;
 
   event.preventDefault();
   const startPoint = fieldGoalDragStartPoint;
@@ -2454,7 +2459,7 @@ function handleFieldGoalPointerUp(event) {
   let swipeAngle = Math.PI / 2;
   let combinedPower = 0;
 
-  if (FIELD_GOAL_USE_MOBILE_SWIPE) {
+  if (fieldGoalUseMobileSwipeActive) {
     const dx = endPoint.x - startPoint.x;
     swipeDy = startPoint.y - endPoint.y;
     rawDistance = Math.hypot(dx, swipeDy);
@@ -2500,6 +2505,7 @@ function handleFieldGoalPointerCancel() {
   fieldGoalDragStartPoint = null;
   fieldGoalDragCurrentPoint = null;
   fieldGoalDragStartAt = 0;
+  fieldGoalUseMobileSwipeActive = false;
   setFieldGoalBallHeld(false);
   setFieldGoalMeterActive(false);
   clearFieldGoalInstructionTimer();
@@ -5476,6 +5482,40 @@ if (FIELD_GOAL_BALL) {
     handleFieldGoalPointerCancel();
   });
 }
+
+// Desktop safety net: if pointer capture is interrupted while dragging,
+// still finalize the kick when pointer is released anywhere on screen.
+window.addEventListener('pointerup', (event) => {
+  handleFieldGoalPointerUp(event);
+}, true);
+
+window.addEventListener('pointercancel', () => {
+  handleFieldGoalPointerCancel();
+}, true);
+
+window.addEventListener('blur', () => {
+  handleFieldGoalPointerCancel();
+});
+
+function releaseFieldGoalFromCoords(clientX, clientY) {
+  if (fieldGoalPointerId === null || !fieldGoalDragStartPoint || !fieldGoalGameActive || fieldGoalKickAnimating) return;
+  handleFieldGoalPointerUp({
+    pointerId: fieldGoalPointerId,
+    clientX,
+    clientY,
+    preventDefault() {}
+  });
+}
+
+window.addEventListener('mouseup', (event) => {
+  releaseFieldGoalFromCoords(event.clientX, event.clientY);
+}, true);
+
+window.addEventListener('touchend', (event) => {
+  const touch = event.changedTouches && event.changedTouches[0];
+  if (!touch) return;
+  releaseFieldGoalFromCoords(touch.clientX, touch.clientY);
+}, { capture: true, passive: false });
 
 if (SUBSCRIBE_BTN) {
   SUBSCRIBE_BTN.addEventListener('click', (event) => {

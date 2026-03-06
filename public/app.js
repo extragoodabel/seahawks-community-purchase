@@ -5485,6 +5485,10 @@ if (FIELD_GOAL_BALL) {
 
 // Desktop safety net: if pointer capture is interrupted while dragging,
 // still finalize the kick when pointer is released anywhere on screen.
+window.addEventListener('pointermove', (event) => {
+  handleFieldGoalPointerMove(event);
+}, true);
+
 window.addEventListener('pointerup', (event) => {
   handleFieldGoalPointerUp(event);
 }, true);
@@ -5497,6 +5501,16 @@ window.addEventListener('blur', () => {
   handleFieldGoalPointerCancel();
 });
 
+function moveFieldGoalFromCoords(clientX, clientY) {
+  if (fieldGoalPointerId === null || !fieldGoalDragStartPoint || !fieldGoalGameActive || fieldGoalKickAnimating) return;
+  handleFieldGoalPointerMove({
+    pointerId: fieldGoalPointerId,
+    clientX,
+    clientY,
+    preventDefault() {}
+  });
+}
+
 function releaseFieldGoalFromCoords(clientX, clientY) {
   if (fieldGoalPointerId === null || !fieldGoalDragStartPoint || !fieldGoalGameActive || fieldGoalKickAnimating) return;
   handleFieldGoalPointerUp({
@@ -5506,6 +5520,10 @@ function releaseFieldGoalFromCoords(clientX, clientY) {
     preventDefault() {}
   });
 }
+
+window.addEventListener('mousemove', (event) => {
+  moveFieldGoalFromCoords(event.clientX, event.clientY);
+}, true);
 
 window.addEventListener('mouseup', (event) => {
   releaseFieldGoalFromCoords(event.clientX, event.clientY);

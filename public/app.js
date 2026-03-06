@@ -417,7 +417,9 @@ const FIELD_GOAL_POWER_DISTANCE_RATIO = 0.26;
 const FIELD_GOAL_MIN_FLICK_DISTANCE = 18;
 const FIELD_GOAL_LED_MISS_DURATION_MS = 1000;
 const FIELD_GOAL_LED_SUCCESS_DURATION_MS = 1500;
-const FIELD_GOAL_INSTRUCTION_SEQUENCE = ["GRAB BALL", "PULL BACK", "SWIPE UP"];
+const FIELD_GOAL_INSTRUCTION_SEQUENCE_DESKTOP = ["GRAB BALL", "PULL BACK", "SWIPE UP"];
+const FIELD_GOAL_INSTRUCTION_SEQUENCE_MOBILE = ["SWIPE TO KICK"];
+const FIELD_GOAL_USE_MOBILE_SWIPE = ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 const FIELD_GOAL_INSTRUCTION_STEP_MS = 1000;
 const FIELD_GOAL_POWER_RED_MAX = 0.30;
 const FIELD_GOAL_POWER_GREEN_MAX = 0.85;
@@ -2101,11 +2103,21 @@ function clearFieldGoalInstructionTimer() {
   }
 }
 
+function getFieldGoalInstructionSequence() {
+  return FIELD_GOAL_USE_MOBILE_SWIPE
+    ? FIELD_GOAL_INSTRUCTION_SEQUENCE_MOBILE
+    : FIELD_GOAL_INSTRUCTION_SEQUENCE_DESKTOP;
+}
+
 function showFieldGoalInstructionEveryOpen() {
   setFieldGoalInstructionVisible(false);
   clearFieldGoalInstructionTimer();
 
-  const steps = FIELD_GOAL_INSTRUCTION_SEQUENCE;
+  if (FIELD_GOAL_INSTRUCTION) {
+    FIELD_GOAL_INSTRUCTION.textContent = FIELD_GOAL_USE_MOBILE_SWIPE ? "SWIPE TO KICK" : "DRAG AND FLICK TO KICK";
+  }
+
+  const steps = getFieldGoalInstructionSequence();
   if (!Array.isArray(steps) || !steps.length) return;
 
   let stepIndex = 0;
@@ -2381,6 +2393,22 @@ function handleFieldGoalPointerMove(event) {
   fieldGoalDragCurrentPoint = point;
 
   const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
+
+  if (FIELD_GOAL_USE_MOBILE_SWIPE) {
+    const dx = point.x - fieldGoalDragStartPoint.x;
+    const dy = point.y - fieldGoalDragStartPoint.y;
+    const rawDistance = Math.hypot(dx, dy);
+    const normalizedPower = clamp(rawDistance / Math.max(1, frameRect.width * FIELD_GOAL_POWER_DISTANCE_RATIO), 0, 1);
+    setFieldGoalMeterValue(normalizedPower);
+
+    const swipeDy = fieldGoalDragStartPoint.y - point.y;
+    if (swipeDy > 6) {
+      fieldGoalMiniGameState.hasSwiped = true;
+      fieldGoalMiniGameState.swipeAngle = Math.atan2(swipeDy, dx || 0);
+    }
+    return;
+  }
+
   const drag = getFieldGoalDragOffset(point, frameRect);
   const heldWidth = fieldGoalBallBaseWidth * 1.12;
   setFieldGoalBallPosition(fieldGoalBallBaseX + drag.offsetX, fieldGoalBallBaseY + drag.offsetY, heldWidth, 0);
@@ -2398,11 +2426,9 @@ function handleFieldGoalPointerUp(event) {
   if (fieldGoalPointerId === null || event.pointerId !== fieldGoalPointerId || !fieldGoalDragStartPoint || !STADIUM_FRAME_MASK) return;
 
   event.preventDefault();
-  const endPoint = getPointFromEvent(event) || fieldGoalDragCurrentPoint || fieldGoalDragStartPoint;
+  const startPoint = fieldGoalDragStartPoint;
+  const endPoint = getPointFromEvent(event) || fieldGoalDragCurrentPoint || startPoint;
   const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
-  const drag = getFieldGoalDragOffset(endPoint, frameRect);
-  const swipeDy = fieldGoalDragStartPoint.y - endPoint.y;
-  const swipeAngle = Math.atan2(swipeDy, drag.dx || 0);
   const elapsedMs = Math.max(16, performance.now() - fieldGoalDragStartAt);
   const activePointerId = fieldGoalPointerId;
   fieldGoalPointerId = null;
@@ -2421,17 +2447,44 @@ function handleFieldGoalPointerUp(event) {
   setFieldGoalBallHeld(false);
   setFieldGoalMeterActive(false);
   clearFieldGoalInstructionTimer();
-  setLedMessage('');
+  setLedMessage();
 
-  if (swipeDy < 12 || drag.rawDistance < FIELD_GOAL_MIN_FLICK_DISTANCE) {
-    prepareFieldGoalBallForKick();
-    showFieldGoalInstructionEveryOpen();
-    return;
+  let rawDistance = 0;
+  let swipeDy = 0;
+  let swipeAngle = Math.PI / 2;
+  let combinedPower = 0;
+
+  if (FIELD_GOAL_USE_MOBILE_SWIPE) {
+    const dx = endPoint.x - startPoint.x;
+    swipeDy = startPoint.y - endPoint.y;
+    rawDistance = Math.hypot(dx, swipeDy);
+    swipeAngle = Math.atan2(swipeDy, dx || 0);
+
+    if (swipeDy < 25 || rawDistance < FIELD_GOAL_MIN_FLICK_DISTANCE) {
+      prepareFieldGoalBallForKick();
+      showFieldGoalInstructionEveryOpen();
+      return;
+    }
+
+    const distancePower = clamp(rawDistance / Math.max(1, frameRect.width * FIELD_GOAL_POWER_DISTANCE_RATIO), 0, 1);
+    const velocityNorm = clamp((rawDistance / elapsedMs) / 1.15, 0, 1);
+    combinedPower = clamp(distancePower * 0.75 + velocityNorm * 0.25, 0.08, 1);
+  } else {
+    const drag = getFieldGoalDragOffset(endPoint, frameRect);
+    swipeDy = startPoint.y - endPoint.y;
+    swipeAngle = Math.atan2(swipeDy, drag.dx || 0);
+    rawDistance = drag.rawDistance;
+
+    if (swipeDy < 12 || rawDistance < FIELD_GOAL_MIN_FLICK_DISTANCE) {
+      prepareFieldGoalBallForKick();
+      showFieldGoalInstructionEveryOpen();
+      return;
+    }
+
+    const distancePower = clamp(rawDistance / Math.max(1, frameRect.width * FIELD_GOAL_POWER_DISTANCE_RATIO), 0, 1);
+    const velocityNorm = clamp((rawDistance / elapsedMs) / 1.15, 0, 1);
+    combinedPower = clamp(distancePower * 0.75 + velocityNorm * 0.25, 0.08, 1);
   }
-
-  const distancePower = clamp(drag.rawDistance / Math.max(1, frameRect.width * FIELD_GOAL_POWER_DISTANCE_RATIO), 0, 1);
-  const velocityNorm = clamp((drag.rawDistance / elapsedMs) / 1.15, 0, 1);
-  const combinedPower = clamp(distancePower * 0.75 + velocityNorm * 0.25, 0.08, 1);
 
   fieldGoalMiniGameState.hasSwiped = true;
   fieldGoalMiniGameState.hasTapped = true;
@@ -5406,6 +5459,7 @@ if (FIELD_GOAL_CLOSE_BTN) {
 }
 
 if (FIELD_GOAL_BALL) {
+  FIELD_GOAL_BALL.draggable = false;
   FIELD_GOAL_BALL.addEventListener('pointerdown', (event) => {
     handleFieldGoalPointerDown(event);
   });

@@ -3210,7 +3210,7 @@ body.boot-hold #stadiumStage {
 }
 
 .bootLoader__spinner {
-  width: 64px;
+  width: 128px;
   height: auto;
   image-rendering: pixelated;
   animation: bootSpin 900ms linear infinite;
@@ -3245,7 +3245,7 @@ body.boot-hold #stadiumStage {
 
 @media (min-width: 768px) {
   .bootLoader__spinner {
-    width: 80px;
+    width: 160px;
   }
 
   .bootLoader__label {

@@ -428,9 +428,15 @@ const FIELD_GOAL_POWER_RED_MAX = 0.30;
 const FIELD_GOAL_POWER_GREEN_MAX = 0.85;
 const FIELD_GOAL_DESKTOP_EDGE_EASE = 0.025;
 const FIELD_GOAL_DESKTOP_SHANK_MULTIPLIER = 0.9;
-const FIELD_GOAL_SHORT_BOUNCE_Y_RATIO = 0.79;
+const FIELD_GOAL_SHORT_BOUNCE_Y_RATIO_MIN = 0.84;
+const FIELD_GOAL_SHORT_BOUNCE_Y_RATIO_POWER_RANGE = 0.07;
+const FIELD_GOAL_SHORT_BOUNCE_Y_RATIO_MAX = 0.91;
+const FIELD_GOAL_SHORT_BOUNCE_MIN_FLIGHT_MS = 520;
 const FIELD_GOAL_SHORT_BOUNCE_DROP_MS = 110;
 const FIELD_GOAL_SHORT_BOUNCE_MS = 340;
+const FIELD_GOAL_SHORT_BOUNCE_MOBILE_POWER_MAX = 0.76;
+const FIELD_GOAL_SHORT_BOUNCE_MOBILE_Y_OFFSET = 0.035;
+const FIELD_GOAL_SHORT_BOUNCE_MOBILE_MIN_FLIGHT_MS = 700;
 const BOOT_LOADER_SHOW_DELAY_MS = 500;
 const BOOT_LOADER_HARD_CAP_MS = 4000;
 const BOOT_PRELOAD_IMAGE_URLS = [
@@ -2316,8 +2322,8 @@ function handleFieldGoalMiss(message) {
   queueNextFieldGoalKick(1200);
 }
 
-function runFieldGoalShortBounceAndMiss(x, y, width, rotation, frameRect) {
-  const landingY = clamp(y, frameRect.height * FIELD_GOAL_SHORT_BOUNCE_Y_RATIO, frameRect.height * 0.92);
+function runFieldGoalShortBounceAndMiss(x, y, width, rotation, frameRect, shortBounceY) {
+  const landingY = clamp(y, shortBounceY, frameRect.height * 0.92);
   const landingWidth = clamp(width * 1.04, Math.max(16, fieldGoalBallBaseWidth * 0.72), Math.max(width, fieldGoalBallBaseWidth * 1.12));
   const dropStartAt = performance.now();
 
@@ -2416,7 +2422,19 @@ function runFieldGoalKickWithFlick(swipeAngle, power) {
     const descending = y > previousY;
     const inGoalLane = x >= zone.left && x <= zone.right;
     const clearedCrossbarInLane = inGoalLane && y <= zone.bottom;
-    const shortBounceY = frameRect.height * FIELD_GOAL_SHORT_BOUNCE_Y_RATIO;
+    const shortBounceRatio = clamp(
+      FIELD_GOAL_SHORT_BOUNCE_Y_RATIO_MIN + (power * FIELD_GOAL_SHORT_BOUNCE_Y_RATIO_POWER_RANGE),
+      FIELD_GOAL_SHORT_BOUNCE_Y_RATIO_MIN,
+      FIELD_GOAL_SHORT_BOUNCE_Y_RATIO_MAX
+    );
+    const shortBounceBaseY = frameRect.height * shortBounceRatio;
+    const shortBounceY = fieldGoalUseMobileSwipeActive
+      ? Math.min(frameRect.height * 0.95, shortBounceBaseY + (frameRect.height * FIELD_GOAL_SHORT_BOUNCE_MOBILE_Y_OFFSET))
+      : shortBounceBaseY;
+    const shortBounceMinFlightMs = fieldGoalUseMobileSwipeActive
+      ? Math.max(FIELD_GOAL_SHORT_BOUNCE_MIN_FLIGHT_MS, FIELD_GOAL_SHORT_BOUNCE_MOBILE_MIN_FLIGHT_MS)
+      : FIELD_GOAL_SHORT_BOUNCE_MIN_FLIGHT_MS;
+    const shortBounceAllowed = !fieldGoalUseMobileSwipeActive || power <= FIELD_GOAL_SHORT_BOUNCE_MOBILE_POWER_MAX;
     previousY = y;
 
     if (descending && clearedCrossbarInLane) {
@@ -2428,9 +2446,9 @@ function runFieldGoalKickWithFlick(swipeAngle, power) {
       return;
     }
 
-    if (descending && inGoalLane && y >= shortBounceY) {
+    if (shortBounceAllowed && descending && inGoalLane && elapsedMs >= shortBounceMinFlightMs && y >= shortBounceY) {
       fieldGoalKickRafId = 0;
-      runFieldGoalShortBounceAndMiss(x, y, w, rotation, frameRect);
+      runFieldGoalShortBounceAndMiss(x, y, w, rotation, frameRect, shortBounceY);
       return;
     }
 
@@ -4138,11 +4156,16 @@ async function triggerSharehawkCounterUpdate() {
     const supabaseStats = await insertGlobalParticipant();
     if (supabaseStats) {
       statsDebugLog('sharehawk update resolved', { source: 'supabase', stats: supabaseStats });
-      animateToStats(supabaseStats, 760, 1120, maybeUnlockTicket);
-      if (isJumbotronOpen) {
-        refreshStatsAndRenderJumbotron('sharehawk-insert').catch((error) => {
-          statsDebugLog('post-insert jumbotron refresh failed', error);
-        });
+      const sharehawkAnimDurationMs = 760;
+      const sharehawkInvestmentAnimDurationMs = 1120;
+      animateToStats(supabaseStats, sharehawkAnimDurationMs, sharehawkInvestmentAnimDurationMs, maybeUnlockTicket);
+      // Safety fallback: if another stats refresh interrupts animation callbacks,
+      // still finalize ticket unlock after the intended number-roll delay.
+      if (pendingTicketUnlock) {
+        const unlockSafetyDelayMs = Math.max(sharehawkAnimDurationMs, sharehawkInvestmentAnimDurationMs) + 140;
+        window.setTimeout(() => {
+          maybeUnlockTicket();
+        }, unlockSafetyDelayMs);
       }
       perfLog('sharehawk counter update', { source: 'supabase', durationMs: Math.round(performance.now() - perfStart) });
       return true;

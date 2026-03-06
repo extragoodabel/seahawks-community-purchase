@@ -703,12 +703,23 @@ body.ui-btn-labels-stacked .uiBtn__label {
   line-height: 1.56;
 }
 
+.proposal-body--introTight {
+  margin-bottom: clamp(4px, calc(7px * var(--ui-scale)), 10px);
+}
+
+.proposal-body--bid {
+  margin-top: 0;
+  text-align: center;
+  font-weight: 700;
+}
+
 .proposal-emphasis {
   margin: clamp(6px, calc(10px * var(--ui-scale)), 14px) 0 0;
   color: #108040;
   font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
   font-size: clamp(10px, calc(17px * var(--ui-scale)), 20px);
   font-weight: 700;
+  text-align: center;
   letter-spacing: 0.01em;
   line-height: 1.4;
 }
@@ -737,31 +748,45 @@ body.ui-btn-labels-stacked .uiBtn__label {
 .proposal-brand {
   margin-top: clamp(8px, calc(14px * var(--ui-scale)), 18px);
   margin-left: auto;
-  text-align: right;
   width: fit-content;
   align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: clamp(4px, calc(7px * var(--ui-scale)), 10px);
+  text-align: right;
 }
 
 .proposal-logoLink {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
+  display: block;
+  width: 17ch;
+  max-width: 100%;
 }
 
 .proposal-logo {
-  width: clamp(62px, calc(110px * var(--ui-scale)), 124px);
+  display: block;
+  width: 100%;
   height: auto;
 }
 
 .proposal-credit {
   display: block;
-  margin-top: clamp(6px, calc(10px * var(--ui-scale)), 12px);
+  margin-top: 0;
   color: #263c92;
   font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
   font-size: clamp(8px, calc(13px * var(--ui-scale)), 14px);
   font-weight: 600;
   line-height: 1.35;
   text-align: right;
+  width: auto;
+}
+
+.proposal-creditLead {
+  display: block;
+}
+
+.proposal-credit .proposal-link {
+  display: block;
 }
 
 .proposal-link {

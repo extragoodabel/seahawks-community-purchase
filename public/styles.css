@@ -1900,7 +1900,9 @@ body.jumbotron-open .uiOverlay__actions .uiBtn {
 }
 
 body.jumbotron-open .uiOverlay__actions #shareHawkBtn {
-  display: block !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
   pointer-events: auto !important;
   opacity: 1 !important;
   filter: none !important;

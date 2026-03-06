@@ -428,6 +428,9 @@ const FIELD_GOAL_POWER_RED_MAX = 0.30;
 const FIELD_GOAL_POWER_GREEN_MAX = 0.85;
 const FIELD_GOAL_DESKTOP_EDGE_EASE = 0.025;
 const FIELD_GOAL_DESKTOP_SHANK_MULTIPLIER = 0.9;
+const FIELD_GOAL_SHORT_BOUNCE_Y_RATIO = 0.79;
+const FIELD_GOAL_SHORT_BOUNCE_DROP_MS = 110;
+const FIELD_GOAL_SHORT_BOUNCE_MS = 340;
 const BOOT_LOADER_SHOW_DELAY_MS = 500;
 const BOOT_LOADER_HARD_CAP_MS = 4000;
 const BOOT_PRELOAD_IMAGE_URLS = [
@@ -2313,6 +2316,62 @@ function handleFieldGoalMiss(message) {
   queueNextFieldGoalKick(1200);
 }
 
+function runFieldGoalShortBounceAndMiss(x, y, width, rotation, frameRect) {
+  const landingY = clamp(y, frameRect.height * FIELD_GOAL_SHORT_BOUNCE_Y_RATIO, frameRect.height * 0.92);
+  const landingWidth = clamp(width * 1.04, Math.max(16, fieldGoalBallBaseWidth * 0.72), Math.max(width, fieldGoalBallBaseWidth * 1.12));
+  const dropStartAt = performance.now();
+
+  const dropTick = (now) => {
+    if (!fieldGoalGameActive) {
+      fieldGoalKickRafId = 0;
+      return;
+    }
+
+    const t = clamp((now - dropStartAt) / FIELD_GOAL_SHORT_BOUNCE_DROP_MS, 0, 1);
+    const eased = easeInQuad(t);
+    const cy = y + (landingY - y) * eased;
+    const cw = width + (landingWidth - width) * eased;
+    setFieldGoalBallPosition(x, cy, cw, rotation + t * 80);
+
+    if (t < 1) {
+      fieldGoalKickRafId = requestAnimationFrame(dropTick);
+      return;
+    }
+
+    const bounceStartAt = performance.now();
+    const bounceTick = (bounceNow) => {
+      if (!fieldGoalGameActive) {
+        fieldGoalKickRafId = 0;
+        return;
+      }
+
+      const bt = clamp((bounceNow - bounceStartAt) / FIELD_GOAL_SHORT_BOUNCE_MS, 0, 1);
+      const damp = 1 - bt;
+      const bounceHeight = frameRect.height * 0.024 * damp;
+      const hop = Math.max(0, Math.sin(bt * Math.PI * 2.2) * bounceHeight);
+      const cy2 = landingY - hop;
+      const squash = 1 - (Math.sin(bt * Math.PI) * 0.09 * damp);
+      const cw2 = landingWidth * squash;
+      setFieldGoalBallPosition(x, cy2, cw2, rotation + 80 + bt * 180);
+
+      if (bt < 1) {
+        fieldGoalKickRafId = requestAnimationFrame(bounceTick);
+        return;
+      }
+
+      fieldGoalKickRafId = 0;
+      fieldGoalKickAnimating = false;
+      fieldGoalMiniGameState.inFlight = false;
+      FIELD_GOAL_BALL.style.opacity = '0';
+      handleFieldGoalMiss('NO GOOD');
+    };
+
+    fieldGoalKickRafId = requestAnimationFrame(bounceTick);
+  };
+
+  fieldGoalKickRafId = requestAnimationFrame(dropTick);
+}
+
 function runFieldGoalKickWithFlick(swipeAngle, power) {
   if (!STADIUM_FRAME_MASK || !FIELD_GOAL_BALL) return;
   if (fieldGoalKickAnimating) return;
@@ -2355,15 +2414,23 @@ function runFieldGoalKickWithFlick(swipeAngle, power) {
     setFieldGoalBallPosition(x, y, w, rotation);
 
     const descending = y > previousY;
-    const inGoalWindow = x >= zone.left && x <= zone.right && y >= zone.top && y <= zone.bottom;
+    const inGoalLane = x >= zone.left && x <= zone.right;
+    const clearedCrossbarInLane = inGoalLane && y <= zone.bottom;
+    const shortBounceY = frameRect.height * FIELD_GOAL_SHORT_BOUNCE_Y_RATIO;
     previousY = y;
 
-    if (descending && inGoalWindow) {
+    if (descending && clearedCrossbarInLane) {
       fieldGoalKickRafId = 0;
       fieldGoalKickAnimating = false;
       fieldGoalMiniGameState.inFlight = false;
       FIELD_GOAL_BALL.style.opacity = '0';
       handleFieldGoalSuccess();
+      return;
+    }
+
+    if (descending && inGoalLane && y >= shortBounceY) {
+      fieldGoalKickRafId = 0;
+      runFieldGoalShortBounceAndMiss(x, y, w, rotation, frameRect);
       return;
     }
 
@@ -4062,7 +4129,6 @@ function updateBrokenGlassLayout() {
 
 async function triggerSharehawkCounterUpdate() {
   const perfStart = performance.now();
-  const base = latestStats || { participantsCount: 0, equalShare: PURCHASE_PRICE };
   const maybeUnlockTicket = () => {
     if (!pendingTicketUnlock) return;
     ticketCountersComplete = true;
@@ -4085,21 +4151,22 @@ async function triggerSharehawkCounterUpdate() {
     statsDebugLog('sharehawk update supabase failed', error);
   }
 
-  // Final local fallback keeps the interaction responsive even if remote
-  // stats sync is temporarily unavailable.
-  const nextCount = base.participantsCount + 1;
-  animateToStats(
-    {
-      participantsCount: nextCount,
-      equalShare: PURCHASE_PRICE / Math.max(nextCount, 1)
-    },
-    760,
-    1120,
-    maybeUnlockTicket
-  );
-  statsDebugLog('sharehawk update resolved', { source: 'local-fallback', participantsCount: nextCount });
-  perfLog('sharehawk counter update', { source: 'local', durationMs: Math.round(performance.now() - perfStart) });
-  return true;
+  // Keep stats truthful: on sync failure, re-fetch remote values instead of
+  // faking a local increment that can later "rewind".
+  try {
+    const refreshed = await refreshStatsNow(420, 'sharehawk-insert-recover', true);
+    if (refreshed?.ok) {
+      maybeUnlockTicket();
+      statsDebugLog('sharehawk update resolved', { source: 'supabase-recover', stats: refreshed.stats });
+      perfLog('sharehawk counter update', { source: 'supabase-recover', durationMs: Math.round(performance.now() - perfStart) });
+      return true;
+    }
+  } catch (error) {
+    statsDebugLog('sharehawk update recover failed', error);
+  }
+
+  perfLog('sharehawk counter update', { source: 'failed', durationMs: Math.round(performance.now() - perfStart) });
+  return false;
 }
 
 async function runSharehawkImpact(source = 'unknown') {
@@ -5054,6 +5121,24 @@ async function loadGlobalStatsFromSupabase(duration = 250, reason = 'manual') {
   return stats;
 }
 
+
+async function insertParticipantDirect(client, reason = 'direct') {
+  const directStart = performance.now();
+  const { error } = await client
+    .from(SUPABASE_PARTICIPANTS_TABLE)
+    .insert([{}]);
+
+  perfLog('sharehawk direct insert', {
+    reason,
+    durationMs: Math.round(performance.now() - directStart),
+    ok: !error
+  });
+
+  if (error) throw error;
+
+  const refreshedCount = await fetchGlobalParticipantsCount();
+  return statsFromParticipantCount(refreshedCount);
+}
 async function insertGlobalParticipant() {
   const client = initSupabaseClient();
   if (!client) return null;
@@ -5065,46 +5150,61 @@ async function insertGlobalParticipant() {
 
   const { key } = getSupabaseCredentials();
   const functionUrl = getSharehawkFunctionUrl();
-  if (!key || !functionUrl) {
-    throw new Error('Share-hawk endpoint unavailable.');
-  }
+  const siteKey = getTurnstileSiteKey();
+  const canUseProtectedInsert = Boolean(siteKey && key && functionUrl);
 
   supabaseInsertInFlight = true;
   const insertStart = performance.now();
-  statsDebugLog("insert participant start");
+  statsDebugLog("insert participant start", { protected: canUseProtectedInsert });
   try {
-    const tokenStart = performance.now();
-    const token = await getTurnstileToken();
-    perfLog('turnstile token ready', { durationMs: Math.round(performance.now() - tokenStart) });
-
-    const requestStart = performance.now();
-    const response = await fetch(functionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: key,
-        Authorization: `Bearer ${key}`
-      },
-      body: JSON.stringify({ token })
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    perfLog('sharehawk edge insert', {
-      durationMs: Math.round(performance.now() - requestStart),
-      ok: response.ok
-    });
-    if (!response.ok) {
-      throw new Error(payload?.error || 'Unable to record share-hawk.');
+    if (!canUseProtectedInsert) {
+      const directStats = await insertParticipantDirect(client, 'no-protected-config');
+      statsDebugLog("insert participant success", { source: "direct", updatedCount: directStats.participantsCount });
+      perfLog('insert participant total', { durationMs: Math.round(performance.now() - insertStart), ok: true, source: 'direct' });
+      return directStats;
     }
 
-    let updatedCount = parseParticipantsCountValue(payload?.count);
-    if (updatedCount == null) {
-      updatedCount = await fetchGlobalParticipantsCount();
-    }
+    try {
+      const tokenStart = performance.now();
+      const token = await getTurnstileToken();
+      perfLog('turnstile token ready', { durationMs: Math.round(performance.now() - tokenStart) });
 
-    statsDebugLog("insert participant success", { updatedCount });
-    perfLog('insert participant total', { durationMs: Math.round(performance.now() - insertStart), ok: true });
-    return statsFromParticipantCount(updatedCount);
+      const requestStart = performance.now();
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: key,
+          Authorization: `Bearer ${key}`
+        },
+        body: JSON.stringify({ token })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      perfLog('sharehawk edge insert', {
+        durationMs: Math.round(performance.now() - requestStart),
+        ok: response.ok
+      });
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Unable to record share-hawk.');
+      }
+
+      let updatedCount = parseParticipantsCountValue(payload?.count);
+      if (updatedCount == null) {
+        updatedCount = await fetchGlobalParticipantsCount();
+      }
+
+      const stats = statsFromParticipantCount(updatedCount);
+      statsDebugLog("insert participant success", { source: "edge", updatedCount });
+      perfLog('insert participant total', { durationMs: Math.round(performance.now() - insertStart), ok: true, source: 'edge' });
+      return stats;
+    } catch (protectedError) {
+      statsDebugLog('protected insert failed; falling back to direct insert', protectedError);
+      const directStats = await insertParticipantDirect(client, 'protected-fallback');
+      statsDebugLog("insert participant success", { source: "direct-fallback", updatedCount: directStats.participantsCount });
+      perfLog('insert participant total', { durationMs: Math.round(performance.now() - insertStart), ok: true, source: 'direct-fallback' });
+      return directStats;
+    }
   } catch (error) {
     statsDebugLog("insert participant failed", error);
     perfLog('insert participant total', { durationMs: Math.round(performance.now() - insertStart), ok: false, error: String(error?.message || error) });

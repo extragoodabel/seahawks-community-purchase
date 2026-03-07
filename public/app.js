@@ -68,6 +68,8 @@ const RECEIPT_PREVIEW_OVERLAY = document.getElementById('receiptPreviewOverlay')
 const RECEIPT_PREVIEW_CARD = document.getElementById('receiptPreviewCard');
 const RECEIPT_PREVIEW_IMAGE = document.getElementById('receiptPreviewImage');
 const RECEIPT_PREVIEW_HINT = document.getElementById('receiptPreviewHint');
+const RECEIPT_PREVIEW_HINT_DESKTOP = RECEIPT_PREVIEW_HINT?.querySelector('.receiptPreviewHint__desktop') || null;
+const RECEIPT_PREVIEW_HINT_MOBILE = RECEIPT_PREVIEW_HINT?.querySelector('.receiptPreviewHint__mobile') || null;
 const RECEIPT_PREVIEW_CLOSE_BTN = document.getElementById('receiptPreviewCloseBtn');
 const SUBSCRIBE_OVERLAY = document.getElementById('subscribeOverlay');
 const SUBSCRIBE_CLOSE_BTN = document.getElementById('subscribeCloseBtn');
@@ -86,6 +88,15 @@ const FIELD_GOAL_RESULT = document.getElementById('fieldGoalResult');
 const FIELD_GOAL_CLOSE_BTN = document.getElementById('fieldGoalCloseBtn');
 const FIELD_GOAL_SCOREBOARD_STATUS = document.getElementById('fieldGoalScoreboardStatus');
 const FIELD_GOAL_COUNTER = document.getElementById('fieldGoalCounter');
+const FIELD_GOAL_TWELVE_OVERLAY = document.getElementById('fieldGoalTwelveOverlay');
+const FIELD_GOAL_SPAWN_SMOKE = document.getElementById('fieldGoalSpawnSmoke');
+const WILLIAMS_UNLOCK_BTN = document.getElementById('williamsUnlockBtn');
+const WILLIAMS_ENCOUNTER_TEXT = document.getElementById('williamsEncounterText');
+const FIELD_GOAL_OVERRIDE_LAYER = document.getElementById('fieldGoalOverrideLayer');
+const FIELD_GOAL_OVERRIDE_EAGLE = document.getElementById('fieldGoalOverrideEagle');
+const FIELD_GOAL_OVERRIDE_SURPRISE_EAGLE = document.getElementById('fieldGoalOverrideSurpriseEagle');
+const FIELD_GOAL_OVERRIDE_SALMON = document.getElementById('fieldGoalOverrideSalmon');
+const FIELD_GOAL_OVERRIDE_WHITEOUT = document.getElementById('fieldGoalOverrideWhiteout');
 const UI_TOAST = document.getElementById('uiToast');
 const BOOT_LOADER = document.getElementById('bootLoader');
 const BOOT_LOADER_SPINNER = document.getElementById('bootLoaderSpinner');
@@ -279,6 +290,7 @@ let receiptPreviewOpen = false;
 let receiptPreviewOpening = false;
 let receiptPreviewGenerating = false;
 let receiptPreviewPayload = null;
+let receiptPreviewVariant = 'receipt';
 let isSubscribeOpen = false;
 let actionLabelLayoutRaf = 0;
 let isSharehawkSession = false;
@@ -337,6 +349,15 @@ let fieldGoalInstructionIntervalId = 0;
 let ledMessageTimerId = 0;
 let fieldGoalHintSeen = false;
 let fieldGoalUseMobileSwipeActive = false;
+let fieldGoalWilliamsUnlocked = false;
+let fieldGoalTwelveFlashPlayedThisSession = false;
+let fieldGoalTwelveFlashTimerId = 0;
+let fieldGoalWilliamsSmokeTimerId = 0;
+let fieldGoalWilliamsTextTimerId = 0;
+let fieldGoalAttemptCount = 0;
+let fieldGoalEagleOverrideActive = false;
+let fieldGoalOverrideRafId = 0;
+let fieldGoalOverrideShakeTimerId = 0;
 
 const fieldGoalMiniGameState = {
   unlocked: false,
@@ -418,10 +439,12 @@ const FIELD_GOAL_READ_SESSION_KEY = 'fgRead';
 const FIELD_GOAL_NUMBERS_SESSION_KEY = 'fgNumbers';
 const FIELD_GOAL_LAUNCHER_SHOWN_SESSION_KEY = 'fgLauncherShown';
 const FIELD_GOAL_HINT_SEEN_SESSION_KEY = 'fgDragHintSeen';
+const FIELD_GOAL_WILLIAMS_UNLOCKED_SESSION_KEY = 'fgWilliamsUnlocked';
 const FIELD_GOAL_ACTIVE_BALL_WIDTH_RATIO = 0.125;
 const FIELD_GOAL_DRAG_RADIUS_RATIO = 0.08;
 const FIELD_GOAL_POWER_DISTANCE_RATIO = 0.26;
 const FIELD_GOAL_MIN_FLICK_DISTANCE = 18;
+const FIELD_GOAL_WEAK_NUDGE_MIN_DISTANCE = 4;
 const FIELD_GOAL_LED_MISS_DURATION_MS = 1000;
 const FIELD_GOAL_LED_SUCCESS_DURATION_MS = 1500;
 const FIELD_GOAL_INSTRUCTION_SEQUENCE_DESKTOP = ["GRAB BALL", "PULL BACK", "SWIPE UP"];
@@ -442,6 +465,16 @@ const FIELD_GOAL_SHORT_BOUNCE_MS = 340;
 const FIELD_GOAL_SHORT_BOUNCE_MOBILE_POWER_MAX = 0.76;
 const FIELD_GOAL_SHORT_BOUNCE_MOBILE_Y_OFFSET = 0.035;
 const FIELD_GOAL_SHORT_BOUNCE_MOBILE_MIN_FLIGHT_MS = 700;
+const FIELD_GOAL_UNLOCK_POINTS = 12;
+const FIELD_GOAL_TWELVE_FLASH_MS = 1200;
+const FIELD_GOAL_WILLIAMS_SMOKE_MS = 680;
+const FIELD_GOAL_WILLIAMS_TEXT_MS = 4000;
+const WILLIAMS_TRADING_CARD_SRC = '/assets/trading-card.png';
+const FIELD_GOAL_OVERRIDE_EVERY_ATTEMPTS = 10;
+const FIELD_GOAL_OVERRIDE_TOTAL_MS = 2800;
+const FIELD_GOAL_OVERRIDE_COLLISION_MS = 820;
+const FIELD_GOAL_OVERRIDE_IMPACT_MS = 2050;
+const FIELD_GOAL_OVERRIDE_SHAKE_MS = 190;
 const BOOT_LOADER_MIN_HOLD_MS = 4500;
 const BOOT_LOADER_HARD_CAP_MS = 8000;
 const BOOT_PRELOAD_IMAGE_URLS = [
@@ -1895,6 +1928,27 @@ function showUiToast(message) {
   }, 1500);
 }
 
+function setButtonInteractiveState(buttonEl, active) {
+  if (!buttonEl) return;
+  const enabled = !!active;
+  buttonEl.disabled = !enabled;
+  buttonEl.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+  buttonEl.style.pointerEvents = enabled ? 'auto' : 'none';
+}
+
+function syncContextualButtonInteractivity() {
+  const homeSecondaryVisible = isSharehawkSession
+    && isHomeScreenVisibleForFieldGoal()
+    && ACTION_ROW_SECONDARY?.getAttribute('aria-hidden') !== 'true';
+
+  setButtonInteractiveState(SHARE_BTN, homeSecondaryVisible);
+  setButtonInteractiveState(SUBSCRIBE_BTN, homeSecondaryVisible);
+
+  const williamsVisible = WILLIAMS_UNLOCK_BTN?.getAttribute('aria-hidden') !== 'true';
+  const williamsActive = fieldGoalGameActive && fieldGoalWilliamsUnlocked && williamsVisible;
+  setButtonInteractiveState(WILLIAMS_UNLOCK_BTN, williamsActive);
+}
+
 function setSharehawkSessionState(active) {
   isSharehawkSession = !!active;
   if (BODY) {
@@ -1903,6 +1957,7 @@ function setSharehawkSessionState(active) {
   if (ACTION_ROW_SECONDARY) {
     ACTION_ROW_SECONDARY.setAttribute('aria-hidden', isSharehawkSession ? 'false' : 'true');
   }
+  syncContextualButtonInteractivity();
   try {
     if (isSharehawkSession) {
       sessionStorage.setItem(IS_SHAREHAWK_SESSION_KEY, '1');
@@ -1936,6 +1991,187 @@ function setFieldGoalCounterDisplay(value) {
   if (LED_MESSAGE_SCORE) {
     LED_MESSAGE_SCORE.textContent = String(fieldGoalGlobalCount).padStart(2, '0');
   }
+}
+
+function resetFieldGoalOverrideVisuals() {
+  if (FIELD_GOAL_OVERRIDE_EAGLE) {
+    FIELD_GOAL_OVERRIDE_EAGLE.style.opacity = '0';
+    FIELD_GOAL_OVERRIDE_EAGLE.style.transform = 'translate3d(-9999px, -9999px, 0)';
+  }
+  if (FIELD_GOAL_OVERRIDE_SURPRISE_EAGLE) {
+    FIELD_GOAL_OVERRIDE_SURPRISE_EAGLE.style.opacity = '0';
+    FIELD_GOAL_OVERRIDE_SURPRISE_EAGLE.style.transform = 'translate3d(-9999px, -9999px, 0)';
+  }
+  if (FIELD_GOAL_OVERRIDE_SALMON) {
+    FIELD_GOAL_OVERRIDE_SALMON.style.opacity = '0';
+    FIELD_GOAL_OVERRIDE_SALMON.style.transform = 'translate3d(-9999px, -9999px, 0)';
+  }
+  if (FIELD_GOAL_OVERRIDE_WHITEOUT) {
+    FIELD_GOAL_OVERRIDE_WHITEOUT.style.opacity = '0';
+  }
+}
+
+function setFieldGoalOverrideLayerVisible(active) {
+  if (BODY) {
+    BODY.classList.toggle('fg-override-active', !!active);
+    if (!active) {
+      BODY.classList.remove('fg-override-impact');
+    }
+  }
+  if (FIELD_GOAL_OVERRIDE_LAYER) {
+    FIELD_GOAL_OVERRIDE_LAYER.setAttribute('aria-hidden', active ? 'false' : 'true');
+  }
+}
+
+function clearFieldGoalOverrideAnimation() {
+  if (fieldGoalOverrideRafId) {
+    cancelAnimationFrame(fieldGoalOverrideRafId);
+    fieldGoalOverrideRafId = 0;
+  }
+  if (fieldGoalOverrideShakeTimerId) {
+    clearTimeout(fieldGoalOverrideShakeTimerId);
+    fieldGoalOverrideShakeTimerId = 0;
+  }
+}
+
+function stopFieldGoalCinematicOverride() {
+  clearFieldGoalOverrideAnimation();
+  fieldGoalEagleOverrideActive = false;
+  setFieldGoalOverrideLayerVisible(false);
+  resetFieldGoalOverrideVisuals();
+}
+
+function maybeRunFieldGoalCinematicOverride(swipeAngle, power) {
+  if (!fieldGoalGameActive || fieldGoalEagleOverrideActive || fieldGoalKickAnimating) return false;
+  fieldGoalAttemptCount += 1;
+  if (fieldGoalAttemptCount % FIELD_GOAL_OVERRIDE_EVERY_ATTEMPTS !== 0) {
+    return false;
+  }
+  runFieldGoalEagleSalmonOverride(swipeAngle, power);
+  return true;
+}
+
+function clearFieldGoalUnlockTimers() {
+  if (fieldGoalTwelveFlashTimerId) {
+    clearTimeout(fieldGoalTwelveFlashTimerId);
+    fieldGoalTwelveFlashTimerId = 0;
+  }
+  if (fieldGoalWilliamsSmokeTimerId) {
+    clearTimeout(fieldGoalWilliamsSmokeTimerId);
+    fieldGoalWilliamsSmokeTimerId = 0;
+  }
+  if (fieldGoalWilliamsTextTimerId) {
+    clearTimeout(fieldGoalWilliamsTextTimerId);
+    fieldGoalWilliamsTextTimerId = 0;
+  }
+  if (BODY) {
+    BODY.classList.remove('fg-williams-first-unlock-flash');
+  }
+}
+
+function setFieldGoalTwelveFlashVisible(active) {
+  if (BODY) {
+    BODY.classList.toggle('fg-twelve-flash', !!active);
+  }
+  if (FIELD_GOAL_TWELVE_OVERLAY) {
+    FIELD_GOAL_TWELVE_OVERLAY.setAttribute('aria-hidden', active ? 'false' : 'true');
+  }
+}
+
+function setFieldGoalWilliamsSmokeVisible(active) {
+  if (BODY) {
+    BODY.classList.toggle('fg-williams-smoke', !!active);
+  }
+  if (FIELD_GOAL_SPAWN_SMOKE) {
+    FIELD_GOAL_SPAWN_SMOKE.setAttribute('aria-hidden', active ? 'false' : 'true');
+  }
+}
+
+function setFieldGoalWilliamsTextVisible(active) {
+  if (BODY) {
+    BODY.classList.toggle('fg-williams-text-visible', !!active);
+  }
+  if (WILLIAMS_ENCOUNTER_TEXT) {
+    WILLIAMS_ENCOUNTER_TEXT.setAttribute('aria-hidden', active ? 'false' : 'true');
+  }
+}
+
+function setFieldGoalWilliamsUnlocked(active, persist = true) {
+  fieldGoalWilliamsUnlocked = !!active;
+  if (BODY) {
+    BODY.classList.toggle('fg-williams-unlocked', fieldGoalWilliamsUnlocked);
+  }
+  if (WILLIAMS_UNLOCK_BTN) {
+    WILLIAMS_UNLOCK_BTN.setAttribute('aria-hidden', fieldGoalWilliamsUnlocked ? 'false' : 'true');
+  }
+  if (!fieldGoalWilliamsUnlocked) {
+    setFieldGoalWilliamsTextVisible(false);
+  }
+
+  syncContextualButtonInteractivity();
+
+  if (persist) {
+    try {
+      if (fieldGoalWilliamsUnlocked) {
+        sessionStorage.setItem(FIELD_GOAL_WILLIAMS_UNLOCKED_SESSION_KEY, '1');
+      } else {
+        sessionStorage.removeItem(FIELD_GOAL_WILLIAMS_UNLOCKED_SESSION_KEY);
+      }
+    } catch {
+      // no-op
+    }
+  }
+}
+
+function triggerFieldGoalWilliamsUnlockSequence(options = {}) {
+  const showWilliamsEncounter = options.showWilliamsEncounter !== false;
+  clearFieldGoalUnlockTimers();
+  setFieldGoalTwelveFlashVisible(true);
+  setFieldGoalWilliamsSmokeVisible(false);
+  setFieldGoalWilliamsTextVisible(false);
+  if (BODY) {
+    BODY.classList.remove('fg-williams-spawn');
+    BODY.classList.toggle('fg-williams-first-unlock-flash', !!showWilliamsEncounter);
+  }
+
+  fieldGoalTwelveFlashTimerId = window.setTimeout(() => {
+    fieldGoalTwelveFlashTimerId = 0;
+    setFieldGoalTwelveFlashVisible(false);
+    BODY?.classList.remove('fg-williams-first-unlock-flash');
+    if (!showWilliamsEncounter) return;
+
+    setFieldGoalWilliamsSmokeVisible(true);
+    setFieldGoalWilliamsTextVisible(true);
+    if (BODY) {
+      BODY.classList.add('fg-williams-spawn');
+    }
+
+    fieldGoalWilliamsSmokeTimerId = window.setTimeout(() => {
+      fieldGoalWilliamsSmokeTimerId = 0;
+      setFieldGoalWilliamsSmokeVisible(false);
+      if (BODY) {
+        BODY.classList.remove('fg-williams-spawn');
+      }
+    }, FIELD_GOAL_WILLIAMS_SMOKE_MS);
+
+    fieldGoalWilliamsTextTimerId = window.setTimeout(() => {
+      fieldGoalWilliamsTextTimerId = 0;
+      setFieldGoalWilliamsTextVisible(false);
+    }, FIELD_GOAL_WILLIAMS_TEXT_MS);
+  }, FIELD_GOAL_TWELVE_FLASH_MS);
+}
+
+function maybeTriggerFieldGoalWilliamsUnlock(points) {
+  if ((Number(points) || 0) < FIELD_GOAL_UNLOCK_POINTS) return;
+  if (fieldGoalTwelveFlashPlayedThisSession) return;
+  fieldGoalTwelveFlashPlayedThisSession = true;
+
+  const isFirstUnlock = !fieldGoalWilliamsUnlocked;
+  if (isFirstUnlock) {
+    setFieldGoalWilliamsUnlocked(true, true);
+  }
+
+  triggerFieldGoalWilliamsUnlockSequence({ showWilliamsEncounter: isFirstUnlock });
 }
 
 function clearLedMessageTimer() {
@@ -2087,18 +2323,27 @@ function hydrateFieldGoalProgressState() {
     fieldGoalLauncherShownYet = sessionStorage.getItem(FIELD_GOAL_LAUNCHER_SHOWN_SESSION_KEY) === '1';
     fieldGoalHintSeen = sessionStorage.getItem(FIELD_GOAL_HINT_SEEN_SESSION_KEY) === '1';
     setFieldGoalPlayed(sessionStorage.getItem(FIELD_GOAL_PLAYED_SESSION_KEY) === '1', false);
+    setFieldGoalWilliamsUnlocked(sessionStorage.getItem(FIELD_GOAL_WILLIAMS_UNLOCKED_SESSION_KEY) === '1', false);
   } catch {
     fieldGoalReadInteracted = false;
     fieldGoalNumbersInteracted = false;
     fieldGoalLauncherShownYet = false;
     fieldGoalHintSeen = false;
     setFieldGoalPlayed(false, false);
+    setFieldGoalWilliamsUnlocked(false, false);
   }
 
   setFieldGoalCounterDisplay(0);
   setFieldGoalUnlocked(fieldGoalReadInteracted && fieldGoalNumbersInteracted);
   setFieldGoalLauncherVisible(false);
   setFieldGoalLedGameMode(false);
+  setFieldGoalTwelveFlashVisible(false);
+  setFieldGoalWilliamsSmokeVisible(false);
+  setFieldGoalWilliamsTextVisible(false);
+  clearFieldGoalUnlockTimers();
+  if (BODY) {
+    BODY.classList.remove('fg-williams-spawn');
+  }
 }
 
 function getFieldGoalZone(frameRect, desktopAssist = false) {
@@ -2144,6 +2389,7 @@ function setFieldGoalGameActive(active) {
   if (!BODY || !FIELD_GOAL_OVERLAY) return;
   BODY.classList.toggle('fg-game-active', fieldGoalGameActive);
   FIELD_GOAL_OVERLAY.setAttribute('aria-hidden', fieldGoalGameActive ? 'false' : 'true');
+  syncContextualButtonInteractivity();
 }
 
 function setFieldGoalMeterValue(value) {
@@ -2290,6 +2536,7 @@ function prepareFieldGoalBallForKick() {
 
 function closeFieldGoalGame() {
   stopFieldGoalKickAnimation();
+  stopFieldGoalCinematicOverride();
   clearFieldGoalInstructionTimer();
   fieldGoalKickAnimating = false;
   fieldGoalPointerId = null;
@@ -2305,8 +2552,13 @@ function closeFieldGoalGame() {
   setFieldGoalResult('');
   setFieldGoalGameActive(false);
   setFieldGoalLedGameMode(false);
+  clearFieldGoalUnlockTimers();
+  setFieldGoalTwelveFlashVisible(false);
+  setFieldGoalWilliamsSmokeVisible(false);
+  setFieldGoalWilliamsTextVisible(false);
   if (BODY) {
     BODY.classList.remove('field-goal-success');
+    BODY.classList.remove('fg-williams-spawn');
   }
   resetFieldGoalBallVisual();
   maybeShowFootball();
@@ -2335,12 +2587,21 @@ function startFieldGoalGame() {
   if (isSubscribeOpen) closeSubscribeWindow();
   setFieldGoalGameActive(true);
   setFieldGoalLauncherVisible(false);
+  fieldGoalTwelveFlashPlayedThisSession = false;
   setFieldGoalCounterDisplay(0);
   setFieldGoalResult('');
   if (BODY) {
     BODY.classList.remove('field-goal-success');
   }
   setFieldGoalLedGameMode(true);
+  stopFieldGoalCinematicOverride();
+  clearFieldGoalUnlockTimers();
+  setFieldGoalTwelveFlashVisible(false);
+  setFieldGoalWilliamsSmokeVisible(false);
+  setFieldGoalWilliamsTextVisible(false);
+  if (BODY) {
+    BODY.classList.remove('fg-williams-spawn');
+  }
 
   prepareFieldGoalBallForKick();
   showFieldGoalInstructionEveryOpen();
@@ -2371,8 +2632,9 @@ function handleFieldGoalSuccess() {
   }
   triggerCelebrationFX({ independent: true, showWelcome: false });
 
-  const nextCount = fieldGoalGlobalCount + 1;
+  const nextCount = fieldGoalGlobalCount + 3;
   setFieldGoalCounterDisplay(nextCount);
+  maybeTriggerFieldGoalWilliamsUnlock(nextCount);
   setFieldGoalResult('');
   setLedMessage("IT'S GOOD", FIELD_GOAL_LED_SUCCESS_DURATION_MS);
 
@@ -2443,6 +2705,242 @@ function runFieldGoalShortBounceAndMiss(x, y, width, rotation, frameRect, shortB
   };
 
   fieldGoalKickRafId = requestAnimationFrame(dropTick);
+}
+
+
+function runFieldGoalEagleSalmonOverride(swipeAngle, power) {
+  if (!STADIUM_FRAME_MASK || !FIELD_GOAL_BALL || !FIELD_GOAL_OVERRIDE_LAYER) return;
+  if (!fieldGoalGameActive || fieldGoalEagleOverrideActive) return;
+
+  stopFieldGoalKickAnimation();
+  clearFieldGoalInstructionTimer();
+  setFieldGoalInstructionVisible(false);
+  setFieldGoalResult('');
+  setLedMessage('');
+  setFieldGoalBallHeld(false);
+  setFieldGoalBallReady(false);
+  setFieldGoalMeterActive(false);
+
+  fieldGoalEagleOverrideActive = true;
+  fieldGoalKickAnimating = true;
+  fieldGoalMiniGameState.inFlight = true;
+
+  clearFieldGoalOverrideAnimation();
+  setFieldGoalOverrideLayerVisible(true);
+  resetFieldGoalOverrideVisuals();
+
+  const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
+  const baseWidth = Math.max(16, fieldGoalBallBaseWidth || (frameRect.width * FIELD_GOAL_ACTIVE_BALL_WIDTH_RATIO));
+  const startX = fieldGoalBallCurrentX || fieldGoalBallBaseX || (frameRect.width * 0.5);
+  const startY = fieldGoalBallCurrentY || fieldGoalBallBaseY || (frameRect.height * 0.905);
+  const launchPower = clamp(Number(power) || 0.52, 0.2, 1);
+
+  const steering = Math.cos(swipeAngle || (Math.PI / 2));
+  const collisionX = clamp(
+    frameRect.width * (0.33 + steering * 0.02),
+    frameRect.width * 0.24,
+    frameRect.width * 0.43
+  );
+  const collisionY = clamp(
+    frameRect.height * (0.18 - Math.sin(swipeAngle || (Math.PI / 2)) * 0.01),
+    frameRect.height * 0.11,
+    frameRect.height * 0.25
+  );
+
+  const eagleWidth = frameRect.width * 0.28;
+  const eagleHeight = eagleWidth * 0.66;
+  const eagleStartX = -eagleWidth * 1.2;
+  const eagleStartY = frameRect.height * 0.105;
+  const eagleCollisionX = collisionX - eagleWidth * 0.48;
+  const eagleCollisionY = collisionY - eagleHeight * 0.34;
+  const surpriseBaseX = collisionX - eagleWidth * 0.5;
+  const surpriseBaseY = collisionY - eagleHeight * 0.36;
+  const eagleExitX = frameRect.width + eagleWidth * 1.08;
+  const eagleExitStartMs = FIELD_GOAL_OVERRIDE_IMPACT_MS + 90;
+  const surpriseSpriteSrc = '/assets/surprise-eagle.png';
+  const normalEagleSpriteSrc = baldEagleRightSrc || '/assets/bald-eagle-rightfacing.png';
+
+  if (FIELD_GOAL_OVERRIDE_EAGLE) {
+    FIELD_GOAL_OVERRIDE_EAGLE.src = baldEagleWithSalmonSrc || '/assets/bald-eagle-with-salmon.png';
+    FIELD_GOAL_OVERRIDE_EAGLE.style.opacity = '1';
+    FIELD_GOAL_OVERRIDE_EAGLE.style.transform = 'translate3d(' + eagleStartX.toFixed(2) + 'px, ' + eagleStartY.toFixed(2) + 'px, 0)';
+  }
+  if (FIELD_GOAL_OVERRIDE_SURPRISE_EAGLE) {
+    FIELD_GOAL_OVERRIDE_SURPRISE_EAGLE.src = surpriseSpriteSrc;
+  }
+  FIELD_GOAL_BALL.style.opacity = '1';
+
+  const startedAt = performance.now();
+  let impactTriggered = false;
+  let eagleExitStarted = false;
+
+  const tick = (now) => {
+    if (!fieldGoalGameActive) {
+      stopFieldGoalCinematicOverride();
+      return;
+    }
+
+    const elapsed = now - startedAt;
+
+    if (elapsed <= FIELD_GOAL_OVERRIDE_COLLISION_MS) {
+      const t = clamp(elapsed / FIELD_GOAL_OVERRIDE_COLLISION_MS, 0, 1);
+      const ascentT = Math.pow(t, 1.14);
+      const arcLeftBias = -frameRect.width * 0.08;
+      const apexX = startX + (collisionX - startX) * 0.66 + arcLeftBias * clamp(launchPower - 0.35, 0, 0.6);
+      const apexY = clamp(
+        collisionY - frameRect.height * (0.1 + launchPower * 0.04),
+        frameRect.height * 0.04,
+        frameRect.height * 0.16
+      );
+      const omt = 1 - ascentT;
+      const ballX = omt * omt * startX + 2 * omt * ascentT * apexX + ascentT * ascentT * collisionX;
+      const ballY = omt * omt * startY + 2 * omt * ascentT * apexY + ascentT * ascentT * collisionY;
+      const ballW = baseWidth * (1 - ascentT * 0.28);
+      setFieldGoalBallPosition(ballX, ballY, ballW, ascentT * 460);
+
+      if (FIELD_GOAL_OVERRIDE_EAGLE) {
+        const et = t * t * (3 - (2 * t));
+        const ex = eagleStartX + (eagleCollisionX - eagleStartX) * et;
+        const ey = eagleStartY + (eagleCollisionY - eagleStartY) * et;
+        FIELD_GOAL_OVERRIDE_EAGLE.style.transform = 'translate3d(' + ex.toFixed(2) + 'px, ' + ey.toFixed(2) + 'px, 0)';
+      }
+    } else {
+      const postDuration = Math.max(1, FIELD_GOAL_OVERRIDE_TOTAL_MS - FIELD_GOAL_OVERRIDE_COLLISION_MS);
+      const postT = clamp((elapsed - FIELD_GOAL_OVERRIDE_COLLISION_MS) / postDuration, 0, 1);
+      const postElapsed = elapsed - FIELD_GOAL_OVERRIDE_COLLISION_MS;
+
+      if (FIELD_GOAL_OVERRIDE_EAGLE) {
+        FIELD_GOAL_OVERRIDE_EAGLE.style.opacity = '0';
+      }
+
+      if (FIELD_GOAL_OVERRIDE_SURPRISE_EAGLE) {
+        FIELD_GOAL_OVERRIDE_SURPRISE_EAGLE.style.opacity = '1';
+
+        if (elapsed >= eagleExitStartMs) {
+          if (!eagleExitStarted) {
+            eagleExitStarted = true;
+            FIELD_GOAL_OVERRIDE_SURPRISE_EAGLE.src = normalEagleSpriteSrc;
+          }
+          const exitT = clamp(
+            (elapsed - eagleExitStartMs) / Math.max(1, FIELD_GOAL_OVERRIDE_TOTAL_MS - eagleExitStartMs),
+            0,
+            1
+          );
+          const ex = surpriseBaseX + (eagleExitX - surpriseBaseX) * easeOutCubic(exitT);
+          const ey = surpriseBaseY + frameRect.height * 0.02 * exitT + Math.sin(postElapsed / 180) * frameRect.height * 0.003;
+          FIELD_GOAL_OVERRIDE_SURPRISE_EAGLE.style.transform = 'translate3d(' + ex.toFixed(2) + 'px, ' + ey.toFixed(2) + 'px, 0)';
+        } else {
+          const hover = Math.sin(postElapsed / 140) * (frameRect.height * 0.0055);
+          FIELD_GOAL_OVERRIDE_SURPRISE_EAGLE.style.transform = 'translate3d(' + surpriseBaseX.toFixed(2) + 'px, ' + (surpriseBaseY + hover).toFixed(2) + 'px, 0)';
+        }
+      }
+
+      const ricochetX = collisionX + frameRect.width * (0.24 * postT);
+      const ricochetY = collisionY - frameRect.height * (0.22 * postT + 0.06 * postT * postT);
+      const ricochetW = Math.max(2, baseWidth * (0.72 - postT * 0.68));
+      setFieldGoalBallPosition(ricochetX, ricochetY, ricochetW, 460 + postT * 620);
+      FIELD_GOAL_BALL.style.opacity = String(clamp(1 - postT * 0.9, 0.1, 1));
+
+      if (FIELD_GOAL_OVERRIDE_SALMON) {
+        const salmonFallDenom = Math.max(1, FIELD_GOAL_OVERRIDE_IMPACT_MS - FIELD_GOAL_OVERRIDE_COLLISION_MS);
+        const fallT = clamp((elapsed - FIELD_GOAL_OVERRIDE_COLLISION_MS) / salmonFallDenom, 0, 1);
+        const salmonX = collisionX + (frameRect.width * 0.5 - collisionX) * (fallT * 0.52) + Math.sin(fallT * Math.PI * 2.4) * frameRect.width * 0.02;
+        const salmonY = collisionY + (frameRect.height * 0.68 - collisionY) * fallT;
+        const salmonScale = 0.38 + fallT * 6.2;
+        const salmonRotate = fallT * 560;
+        FIELD_GOAL_OVERRIDE_SALMON.style.opacity = '1';
+        FIELD_GOAL_OVERRIDE_SALMON.style.transform = 'translate3d(' + salmonX.toFixed(2) + 'px, ' + salmonY.toFixed(2) + 'px, 0) translate(-50%, -50%) rotate(' + salmonRotate.toFixed(2) + 'deg) scale(' + salmonScale.toFixed(3) + ')';
+      }
+
+      if (!impactTriggered && elapsed >= FIELD_GOAL_OVERRIDE_IMPACT_MS) {
+        impactTriggered = true;
+        if (BODY) {
+          BODY.classList.add('fg-override-impact');
+        }
+        fieldGoalOverrideShakeTimerId = window.setTimeout(() => {
+          fieldGoalOverrideShakeTimerId = 0;
+          BODY?.classList.remove('fg-override-impact');
+        }, FIELD_GOAL_OVERRIDE_SHAKE_MS);
+      }
+
+      if (FIELD_GOAL_OVERRIDE_WHITEOUT) {
+        let white = 0;
+        if (elapsed >= FIELD_GOAL_OVERRIDE_IMPACT_MS) {
+          const flashInMs = 110;
+          const flashOutStart = FIELD_GOAL_OVERRIDE_IMPACT_MS + flashInMs;
+          if (elapsed <= flashOutStart) {
+            white = clamp((elapsed - FIELD_GOAL_OVERRIDE_IMPACT_MS) / flashInMs, 0, 1);
+          } else {
+            white = 1 - clamp((elapsed - flashOutStart) / Math.max(1, FIELD_GOAL_OVERRIDE_TOTAL_MS - flashOutStart), 0, 1);
+          }
+        }
+        FIELD_GOAL_OVERRIDE_WHITEOUT.style.opacity = white.toFixed(3);
+      }
+    }
+
+    if (elapsed >= FIELD_GOAL_OVERRIDE_TOTAL_MS) {
+      fieldGoalOverrideRafId = 0;
+      fieldGoalKickAnimating = false;
+      fieldGoalMiniGameState.inFlight = false;
+      fieldGoalEagleOverrideActive = false;
+      FIELD_GOAL_BALL.style.opacity = '0';
+      stopFieldGoalCinematicOverride();
+      queueNextFieldGoalKick(220);
+      return;
+    }
+
+    fieldGoalOverrideRafId = requestAnimationFrame(tick);
+  };
+
+  fieldGoalOverrideRafId = requestAnimationFrame(tick);
+}
+
+
+function runFieldGoalWeakNudgeMiss() {
+  if (!STADIUM_FRAME_MASK || !FIELD_GOAL_BALL) return;
+  if (fieldGoalKickAnimating) return;
+
+  fieldGoalKickAnimating = true;
+  fieldGoalMiniGameState.inFlight = true;
+  setFieldGoalBallHeld(false);
+  setFieldGoalBallReady(false);
+  setFieldGoalMeterActive(false);
+
+  const frameRect = STADIUM_FRAME_MASK.getBoundingClientRect();
+  const startX = fieldGoalBallCurrentX || fieldGoalBallBaseX || (frameRect.width * 0.5);
+  const startY = fieldGoalBallCurrentY || fieldGoalBallBaseY || (frameRect.height * 0.905);
+  const baseWidth = Math.max(16, fieldGoalBallBaseWidth || (frameRect.width * FIELD_GOAL_ACTIVE_BALL_WIDTH_RATIO));
+  const nudgeTravelX = frameRect.width * 0.12;
+  const hopHeight = frameRect.height * 0.016;
+  const durationMs = 560;
+  const startedAt = performance.now();
+
+  FIELD_GOAL_BALL.style.opacity = '1';
+
+  const tick = (now) => {
+    const progress = clamp((now - startedAt) / durationMs, 0, 1);
+    const eased = 1 - Math.pow(1 - progress, 2);
+    const x = startX + nudgeTravelX * eased;
+    const hop = Math.sin(progress * Math.PI) * hopHeight;
+    const y = startY - Math.max(0, hop);
+    const roll = progress * 220;
+    const width = baseWidth * (1 - progress * 0.04);
+
+    setFieldGoalBallPosition(x, y, width, roll);
+
+    if (progress < 1) {
+      fieldGoalKickRafId = requestAnimationFrame(tick);
+      return;
+    }
+
+    fieldGoalKickRafId = 0;
+    fieldGoalKickAnimating = false;
+    fieldGoalMiniGameState.inFlight = false;
+    FIELD_GOAL_BALL.style.opacity = '0';
+    handleFieldGoalMiss('NO GOOD');
+  };
+
+  fieldGoalKickRafId = requestAnimationFrame(tick);
 }
 
 function runFieldGoalKickWithFlick(swipeAngle, power) {
@@ -2641,8 +3139,16 @@ function handleFieldGoalPointerUp(event) {
     swipeAngle = Math.atan2(swipeDy, dx || 0);
 
     if (swipeDy < 25 || rawDistance < FIELD_GOAL_MIN_FLICK_DISTANCE) {
-      prepareFieldGoalBallForKick();
-      showFieldGoalInstructionEveryOpen();
+      if (rawDistance >= FIELD_GOAL_WEAK_NUDGE_MIN_DISTANCE && swipeDy > 0) {
+        const weakPower = clamp(rawDistance / Math.max(1, frameRect.width * FIELD_GOAL_POWER_DISTANCE_RATIO), 0.05, 0.22);
+        if (maybeRunFieldGoalCinematicOverride(swipeAngle, weakPower)) {
+          return;
+        }
+        runFieldGoalWeakNudgeMiss();
+      } else {
+        prepareFieldGoalBallForKick();
+        showFieldGoalInstructionEveryOpen();
+      }
       return;
     }
 
@@ -2655,10 +3161,21 @@ function handleFieldGoalPointerUp(event) {
     swipeDy = startPoint.y - endPoint.y;
     swipeAngle = hasSwipeSignal ? fieldGoalMiniGameState.swipeAngle : Math.atan2(swipeDy, drag.dx || 0);
     rawDistance = drag.rawDistance;
+    const desktopWeakNudge = swipeDy > 0
+      && rawDistance >= FIELD_GOAL_WEAK_NUDGE_MIN_DISTANCE
+      && rawDistance <= (FIELD_GOAL_MIN_FLICK_DISTANCE * 0.72);
 
-    if ((swipeDy < 12 || rawDistance < FIELD_GOAL_MIN_FLICK_DISTANCE) && !hasSwipeSignal) {
-      prepareFieldGoalBallForKick();
-      showFieldGoalInstructionEveryOpen();
+    if ((swipeDy < 12 || rawDistance < FIELD_GOAL_MIN_FLICK_DISTANCE) && (!hasSwipeSignal || desktopWeakNudge)) {
+      if (desktopWeakNudge) {
+        const weakPower = clamp(rawDistance / Math.max(1, frameRect.width * FIELD_GOAL_POWER_DISTANCE_RATIO), 0.05, 0.22);
+        if (maybeRunFieldGoalCinematicOverride(swipeAngle, weakPower)) {
+          return;
+        }
+        runFieldGoalWeakNudgeMiss();
+      } else {
+        prepareFieldGoalBallForKick();
+        showFieldGoalInstructionEveryOpen();
+      }
       return;
     }
 
@@ -2674,10 +3191,26 @@ function handleFieldGoalPointerUp(event) {
     }
   }
 
+  const desktopWeakForwardTap = !fieldGoalUseMobileSwipeActive
+    && swipeDy > 0
+    && rawDistance <= (FIELD_GOAL_MIN_FLICK_DISTANCE * 1.1)
+    && combinedPower <= 0.2;
+  if (desktopWeakForwardTap) {
+    if (maybeRunFieldGoalCinematicOverride(swipeAngle, combinedPower)) {
+      return;
+    }
+    runFieldGoalWeakNudgeMiss();
+    return;
+  }
+
   fieldGoalMiniGameState.hasSwiped = true;
   fieldGoalMiniGameState.hasTapped = true;
   fieldGoalMiniGameState.swipeAngle = swipeAngle;
   setFieldGoalMeterValue(combinedPower);
+
+  if (maybeRunFieldGoalCinematicOverride(swipeAngle, combinedPower)) {
+    return;
+  }
 
   runFieldGoalKickWithFlick(swipeAngle, combinedPower);
 }
@@ -2732,12 +3265,18 @@ function setReceiptPreviewVisible(active) {
   if (!BODY || !RECEIPT_PREVIEW_OVERLAY) return;
   BODY.classList.toggle('receipt-preview-open', receiptPreviewOpen);
   RECEIPT_PREVIEW_OVERLAY.setAttribute('aria-hidden', receiptPreviewOpen ? 'false' : 'true');
+  syncContextualButtonInteractivity();
 }
 
 function closeReceiptPreview(exitJumbotron = true) {
   receiptPreviewOpening = false;
   setReceiptPreviewVisible(false);
-  BODY?.classList.remove('receipt-preview-opening');
+  BODY?.classList.remove('receipt-preview-opening', 'receipt-preview-trading-card');
+  RECEIPT_PREVIEW_CARD?.classList.remove('receiptPreviewCard--trading');
+  receiptPreviewVariant = 'receipt';
+  if (RECEIPT_PREVIEW_IMAGE) {
+    RECEIPT_PREVIEW_IMAGE.alt = 'Share-hawk receipt preview';
+  }
   if (exitJumbotron && isJumbotronOpen && !isJumbotronAnimating) {
     closeJumbotronOverlay();
     return;
@@ -2750,6 +3289,7 @@ function setSubscribeOverlayVisible(active) {
   if (!BODY || !SUBSCRIBE_OVERLAY) return;
   BODY.classList.toggle('subscribe-open', isSubscribeOpen);
   SUBSCRIBE_OVERLAY.setAttribute('aria-hidden', isSubscribeOpen ? 'false' : 'true');
+  syncContextualButtonInteractivity();
 }
 
 function mountKitSubscribeOnce() {
@@ -2781,10 +3321,18 @@ function closeSubscribeWindow() {
 
 function updateReceiptPreviewHint() {
   if (!RECEIPT_PREVIEW_HINT) return;
-  RECEIPT_PREVIEW_HINT.setAttribute(
-    'aria-label',
-    isMobileReceiptSaveMode() ? 'Tap and hold ticket to save' : 'Click to download'
-  );
+  const isTradingCardPreview = receiptPreviewVariant === 'trading-card';
+  const desktopHint = isTradingCardPreview ? 'Click card to download' : 'Click to download';
+  const mobileHint = isTradingCardPreview ? 'Tap and hold card to save' : 'Tap and hold ticket to save';
+
+  if (RECEIPT_PREVIEW_HINT_DESKTOP) {
+    RECEIPT_PREVIEW_HINT_DESKTOP.textContent = desktopHint;
+  }
+  if (RECEIPT_PREVIEW_HINT_MOBILE) {
+    RECEIPT_PREVIEW_HINT_MOBILE.textContent = mobileHint;
+  }
+
+  RECEIPT_PREVIEW_HINT.setAttribute('aria-label', isMobileReceiptSaveMode() ? mobileHint : desktopHint);
 }
 
 function setReceiptPreviewAnimationOrigin(triggerEl) {
@@ -2825,43 +3373,81 @@ function closeJumbotronQuietlyForTicketPreview() {
   }, 240);
 }
 
-async function openReceiptPreview(triggerEl) {
-  if (!CLAIM_SHARE_BTN || !RECEIPT_PREVIEW_OVERLAY || !RECEIPT_PREVIEW_CARD || !RECEIPT_PREVIEW_IMAGE) return;
+async function openReceiptPreview(triggerEl, options = {}) {
+  if (!RECEIPT_PREVIEW_OVERLAY || !RECEIPT_PREVIEW_CARD || !RECEIPT_PREVIEW_IMAGE) return;
   if (receiptPreviewGenerating || receiptPreviewOpen || receiptPreviewOpening) return;
 
+  const isTradingCardPreview = options.variant === 'trading-card';
   const stats = latestStats || { participantsCount: 0, equalShare: PURCHASE_PRICE };
   const sharehawkCount = Math.max(0, Math.floor(Number(stats.participantsCount) || 0));
 
   receiptPreviewGenerating = true;
-  CLAIM_SHARE_BTN.disabled = true;
+  receiptPreviewVariant = isTradingCardPreview ? 'trading-card' : 'receipt';
+  BODY?.classList.toggle('receipt-preview-trading-card', isTradingCardPreview);
+  RECEIPT_PREVIEW_CARD.classList.toggle('receiptPreviewCard--trading', isTradingCardPreview);
+
+  if (!isTradingCardPreview && CLAIM_SHARE_BTN) {
+    CLAIM_SHARE_BTN.disabled = true;
+  }
+
   try {
-    const payload = await buildSharehawkReceiptPNGData({ sharehawkNumber: sharehawkCount });
+    let payload = null;
+    if (isTradingCardPreview) {
+      payload = {
+        href: options.imageSrc || WILLIAMS_TRADING_CARD_SRC,
+        downloadName: options.downloadName || 'williams-trading-card.png'
+      };
+      RECEIPT_PREVIEW_IMAGE.alt = options.imageAlt || 'Leonard Williams trading card preview';
+    } else {
+      payload = await buildSharehawkReceiptPNGData({ sharehawkNumber: sharehawkCount });
+      RECEIPT_PREVIEW_IMAGE.alt = 'Share-hawk receipt preview';
+    }
+
     receiptPreviewPayload = payload;
     RECEIPT_PREVIEW_IMAGE.src = payload.href;
     updateReceiptPreviewHint();
     setReceiptPreviewVisible(true);
     BODY?.classList.add('receipt-preview-opening');
     receiptPreviewOpening = true;
-    // Measure once visible so the card can animate out of the button center.
-    setReceiptPreviewAnimationOrigin(triggerEl || CLAIM_SHARE_BTN);
+
+    if (isTradingCardPreview) {
+      RECEIPT_PREVIEW_CARD.style.setProperty('--receipt-from-dx', '0px');
+      RECEIPT_PREVIEW_CARD.style.setProperty('--receipt-from-dy', '0px');
+    } else {
+      // Measure once visible so the card can animate out of the button center.
+      setReceiptPreviewAnimationOrigin(triggerEl || CLAIM_SHARE_BTN);
+    }
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       BODY?.classList.remove('receipt-preview-opening');
       receiptPreviewOpening = false;
       closeJumbotronQuietlyForTicketPreview();
     } else {
+      const openAnimMs = isTradingCardPreview ? 300 : 480;
       window.setTimeout(() => {
         BODY?.classList.remove('receipt-preview-opening');
         receiptPreviewOpening = false;
         closeJumbotronQuietlyForTicketPreview();
-      }, 480);
+      }, openAnimMs);
     }
   } catch {
-    closeReceiptPreview();
+    closeReceiptPreview(false);
   } finally {
     receiptPreviewGenerating = false;
-    CLAIM_SHARE_BTN.disabled = false;
+    if (!isTradingCardPreview && CLAIM_SHARE_BTN) {
+      CLAIM_SHARE_BTN.disabled = false;
+    }
   }
+}
+
+async function openWilliamsTradingCardPreview(triggerEl) {
+  if (!fieldGoalGameActive || !fieldGoalWilliamsUnlocked || WILLIAMS_UNLOCK_BTN?.disabled) return;
+  await openReceiptPreview(triggerEl || WILLIAMS_UNLOCK_BTN, {
+    variant: 'trading-card',
+    imageSrc: WILLIAMS_TRADING_CARD_SRC,
+    downloadName: 'leonard-williams-trading-card.png',
+    imageAlt: 'Leonard Williams trading card preview'
+  });
 }
 
 function loadImageForTicket(src) {
@@ -3025,10 +3611,13 @@ async function buildSharehawkReceiptPNGData({ sharehawkNumber }) {
 }
 
 function downloadSharehawkReceiptPNG(payload) {
-  if (!payload?.href || !payload?.displayNumber) return;
+  if (!payload?.href) return;
   const a = document.createElement('a');
   a.href = payload.href;
-  a.download = `sharehawk-receipt-${payload.displayNumber}.png`;
+  const fallbackName = payload?.displayNumber
+    ? `sharehawk-receipt-${payload.displayNumber}.png`
+    : 'sharehawk-receipt.png';
+  a.download = payload?.downloadName || fallbackName;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -3940,6 +4529,7 @@ function closeProposalReveal() {
   proposalRunning = false;
   proposalOpen = false;
   BODY?.classList.remove('proposal-open');
+  syncContextualButtonInteractivity();
   hideProposalSprites();
   if (PROPOSAL_HAWK) {
     PROPOSAL_HAWK.style.transform = 'translate3d(-9999px, -9999px, 0)';
@@ -4534,6 +5124,7 @@ function openJumbotronOverlay() {
   isJumbotronOpen = true;
   JUMBOTRON_OVERLAY.setAttribute('aria-hidden', 'false');
   BODY.classList.add('jumbotron-open');
+  syncContextualButtonInteractivity();
   statsDebugLog("jumbotron opened", { isJumbotronOpen, isJumbotronAnimating });
   applyBrokenGlassIfNeeded();
   refreshStatsAndRenderJumbotron("open");
@@ -4588,6 +5179,7 @@ function closeJumbotronOverlay() {
     isJumbotronOpen = false;
     isJumbotronAnimating = false;
     BODY.classList.remove('jumbotron-open', 'jumbotron-opening', 'jumbotron-closing');
+    syncContextualButtonInteractivity();
     JUMBOTRON_OVERLAY.setAttribute('aria-hidden', 'true');
     resetSharehawkImpactState();
     if (DEBUG_JUMBOTRON) BODY.classList.remove('debug-jumbotron');
@@ -4604,6 +5196,7 @@ function closeJumbotronOverlay() {
     isJumbotronOpen = false;
     isJumbotronAnimating = false;
     BODY.classList.remove('jumbotron-open', 'jumbotron-closing');
+    syncContextualButtonInteractivity();
     JUMBOTRON_OVERLAY.setAttribute('aria-hidden', 'true');
     resetSharehawkImpactState();
     if (DEBUG_JUMBOTRON) BODY.classList.remove('debug-jumbotron');
@@ -4753,6 +5346,7 @@ async function runProposalReveal() {
       setProposalContentFrame(final.finalX, final.finalTop, final.finalWidth, final.finalHeight);
       proposalOpen = true;
       BODY?.classList.add('proposal-open');
+      syncContextualButtonInteractivity();
       hideProposalSprites();
       return;
     }
@@ -4868,6 +5462,7 @@ async function runProposalReveal() {
     PROPOSAL_CLOSED_SCROLL.style.opacity = '0';
     proposalOpen = true;
     BODY?.classList.add('proposal-open');
+    syncContextualButtonInteractivity();
   } catch (error) {
     console.error(error);
     if (STADIUM_FRAME_MASK && PROPOSAL_OPEN_SCROLL) {
@@ -4878,6 +5473,7 @@ async function runProposalReveal() {
       setProposalContentFrame(final.finalX, final.finalTop, final.finalWidth, final.finalHeight);
       proposalOpen = true;
       BODY?.classList.add('proposal-open');
+      syncContextualButtonInteractivity();
     }
   } finally {
     proposalRunning = false;
@@ -5708,6 +6304,17 @@ if (FIELD_GOAL_CLOSE_BTN) {
   });
 }
 
+if (WILLIAMS_UNLOCK_BTN) {
+  WILLIAMS_UNLOCK_BTN.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!fieldGoalGameActive || !fieldGoalWilliamsUnlocked || WILLIAMS_UNLOCK_BTN.disabled) {
+      return;
+    }
+    openWilliamsTradingCardPreview(event.currentTarget instanceof HTMLElement ? event.currentTarget : WILLIAMS_UNLOCK_BTN);
+  });
+}
+
 if (FIELD_GOAL_BALL) {
   FIELD_GOAL_BALL.draggable = false;
   FIELD_GOAL_BALL.addEventListener('pointerdown', (event) => {
@@ -5783,6 +6390,9 @@ if (SUBSCRIBE_BTN) {
   SUBSCRIBE_BTN.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (!isSharehawkSession || !isHomeScreenVisibleForFieldGoal() || SUBSCRIBE_BTN.disabled) {
+      return;
+    }
     triggerCelebrationFX({ independent: true, showWelcome: false });
     openSubscribeWindow();
   });
@@ -5792,6 +6402,9 @@ if (SHARE_BTN) {
   SHARE_BTN.addEventListener('click', async (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (!isSharehawkSession || !isHomeScreenVisibleForFieldGoal() || SHARE_BTN.disabled) {
+      return;
+    }
     triggerCelebrationFX({ independent: true, showWelcome: false });
     const shareData = {
       title: 'Community Proposal to Purchase the Seattle Seahawks',
@@ -5955,6 +6568,7 @@ async function init() {
   hydrateWelcomeHeadingState();
   hydrateTicketUnlockedState();
   hydrateFieldGoalProgressState();
+  syncContextualButtonInteractivity();
   fxCelebrationPlayed = isCelebrationPlayed();
   initCelebrationFX();
   updateKickoffCountdown();

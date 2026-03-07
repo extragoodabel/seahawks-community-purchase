@@ -153,6 +153,14 @@
                       <div class="layerWrap layerWrap--field" data-layer="field" aria-hidden="true">
                         <div class="layerInner">
                           <img class="layerAsset" src="/stadium/07-field.png" alt="" aria-hidden="true" />
+                          <div id="fieldGoalSpawnSmoke" class="fieldGoalSpawnSmoke" aria-hidden="true">
+                            <span class="fieldGoalSpawnSmoke__puff fieldGoalSpawnSmoke__puff--1" aria-hidden="true"></span>
+                            <span class="fieldGoalSpawnSmoke__puff fieldGoalSpawnSmoke__puff--2" aria-hidden="true"></span>
+                            <span class="fieldGoalSpawnSmoke__puff fieldGoalSpawnSmoke__puff--3" aria-hidden="true"></span>
+                          </div>
+                          <button id="williamsUnlockBtn" class="fieldUnlockPixie" type="button" aria-label="Leonard Williams unlock" aria-hidden="true">
+                            <img class="fieldUnlockPixie__img" src="/assets/williams-throwback.png" alt="" aria-hidden="true" />
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -203,6 +211,12 @@
                       <div id="fieldGoalInstruction" class="fieldGoalInstruction">DRAG AND FLICK TO KICK</div>
                       <img id="fieldGoalBall" class="fieldGoalBall" src="/assets/football.png" alt="" aria-hidden="true" />
                       <div id="fieldGoalBallShadow" class="fieldGoalBallShadow" aria-hidden="true"></div>
+                      <div id="fieldGoalOverrideLayer" class="fieldGoalOverrideLayer" aria-hidden="true">
+                        <img id="fieldGoalOverrideEagle" class="fieldGoalOverrideSprite fieldGoalOverrideSprite--eagle" src="/assets/bald-eagle-with-salmon.png" alt="" aria-hidden="true" />
+                        <img id="fieldGoalOverrideSurpriseEagle" class="fieldGoalOverrideSprite fieldGoalOverrideSprite--surprise" src="/assets/surprise-eagle.png" alt="" aria-hidden="true" />
+                        <img id="fieldGoalOverrideSalmon" class="fieldGoalOverrideSprite fieldGoalOverrideSprite--salmon" src="/assets/salmon-facing-left.png" alt="" aria-hidden="true" />
+                        <div id="fieldGoalOverrideWhiteout" class="fieldGoalOverrideWhiteout" aria-hidden="true"></div>
+                      </div>
                       <div id="fieldGoalMeter" class="fieldGoalMeter" aria-hidden="true">
                         <div class="fieldGoalMeter__label">POWER</div>
                         <div class="fieldGoalMeter__track">
@@ -213,6 +227,10 @@
                         </div>
                       </div>
                       <div id="fieldGoalResult" class="fieldGoalResult" aria-live="polite"></div>
+                      <div id="fieldGoalTwelveOverlay" class="fieldGoalTwelveOverlay" aria-hidden="true">
+                        <div class="fieldGoalTwelveOverlay__value">12</div>
+                      </div>
+                      <div id="williamsEncounterText" class="williamsEncounterText" aria-live="polite" aria-hidden="true">A wild Leonard Williams appeared!</div>
                       <button id="fieldGoalCloseBtn" class="uiClose" type="button" aria-label="Close field goal game">
                         <span class="uiClose__glyph" aria-hidden="true">X</span>
                       </button>

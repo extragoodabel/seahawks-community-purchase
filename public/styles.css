@@ -3528,7 +3528,6 @@ body.boot-hold #stadiumStage {
   from {
     transform: rotate(0deg);
   }
-
   to {
     transform: rotate(360deg);
   }
@@ -3576,4 +3575,189 @@ body.boot-hold #stadiumStage {
   text-align: center;
   text-transform: none;
   opacity: 0.9;
+}
+
+/* BEAST QUAKE easter egg */
+.layerWrap--giantTrophies {
+  z-index: 2;
+  --x-final: 0px;
+  --y-final: 0px;
+  --enter-y: -60px;
+}
+
+.layerWrap--giantTrophies .layerInner {
+  --layer-scale: 1.032;
+}
+
+.layerAsset--giantTrophies {
+  opacity: 0;
+  transform: translateY(56%);
+  transition: opacity 260ms linear, transform 620ms cubic-bezier(0.2, 0.8, 0.22, 1);
+}
+
+body.beast-quake-unlocked .layerAsset--giantTrophies {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+body.beast-quake-revealing .layerAsset--giantTrophies {
+  opacity: 1;
+  animation: beastQuakeTrophiesRise 1900ms cubic-bezier(0.16, 0.88, 0.24, 1) forwards;
+}
+
+.spaceNeedleHotspot {
+  position: absolute;
+  left: 24.63%;
+  top: 32.7%;
+  width: 10%;
+  height: 12%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 58;
+}
+
+body.beast-quake-unlocked .spaceNeedleHotspot,
+body.proposal-open .spaceNeedleHotspot,
+body.jumbotron-open .spaceNeedleHotspot {
+  pointer-events: none;
+}
+
+.uiOverlay__headlineBeast {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-family: "Press Start 2P", "VT323", "Courier New", monospace;
+  font-size: clamp(38px, calc(148px * var(--frameScale)), 174px);
+  line-height: 0.92;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow:
+    0 2px 0 #1a2d63,
+    0 0 10px rgba(16, 128, 64, 0.75),
+    0 0 20px rgba(16, 128, 64, 0.45);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 260;
+}
+
+body.beast-quake-active .uiOverlay__headline,
+body.beast-quake-active .uiOverlay__headlineAlt {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+body.beast-quake-active .uiOverlay__headlineBeast {
+  opacity: 1;
+  visibility: visible;
+  animation: beastQuakeHeadingShake 130ms steps(2, end) infinite;
+}
+
+body.beast-quake-rumbling .stadium-scene {
+  animation: beastQuakeSceneRumble 120ms steps(2, end) infinite;
+}
+
+@keyframes beastQuakeTrophiesRise {
+  0% {
+    transform: translateY(62%);
+  }
+  72% {
+    transform: translateY(-3%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes beastQuakeSceneRumble {
+  0% {
+    transform: translate3d(-3px, 2px, 0);
+  }
+  25% {
+    transform: translate3d(4px, -3px, 0);
+  }
+  50% {
+    transform: translate3d(-4px, -1px, 0);
+  }
+  75% {
+    transform: translate3d(3px, 2px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes beastQuakeHeadingShake {
+  0% {
+    transform: translate3d(-4px, 2px, 0);
+  }
+  25% {
+    transform: translate3d(4px, -3px, 0);
+  }
+  50% {
+    transform: translate3d(-3px, -2px, 0);
+  }
+  75% {
+    transform: translate3d(3px, 2px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Space Needle easter egg shimmer cue */
+.spaceNeedleShimmer {
+  position: absolute;
+  left: 23.9%;
+  top: 32.7%;
+  width: 7.4%;
+  height: 1.2%;
+  transform: translate(-50%, -50%) scale(0.92);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9;
+  will-change: opacity, transform;
+}
+
+.spaceNeedleShimmer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.96) 0 6px,
+    rgba(176, 208, 236, 0.62) 6px 10px
+  );
+}
+
+.spaceNeedleShimmer::after {
+  content: "";
+  position: absolute;
+  inset: -190% -35%;
+  border-radius: 999px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(188, 236, 255, 0.56) 0%,
+    rgba(188, 236, 255, 0.24) 46%,
+    rgba(188, 236, 255, 0) 82%
+  );
+}
+
+body.boot-hold .spaceNeedleShimmer,
+body.splash-active .spaceNeedleShimmer,
+body.proposal-open .spaceNeedleShimmer,
+body.jumbotron-open .spaceNeedleShimmer,
+body.beast-quake-unlocked .spaceNeedleShimmer {
+  opacity: 0 !important;
 }

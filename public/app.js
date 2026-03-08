@@ -100,6 +100,9 @@ const FIELD_GOAL_OVERRIDE_WHITEOUT = document.getElementById('fieldGoalOverrideW
 const UI_TOAST = document.getElementById('uiToast');
 const BOOT_LOADER = document.getElementById('bootLoader');
 const BOOT_LOADER_SPINNER = document.getElementById('bootLoaderSpinner');
+const SPACE_NEEDLE_HOTSPOT = document.getElementById('spaceNeedleHotspot');
+const BEAST_QUAKE_HEADING = document.getElementById('beastQuakeHeading');
+const SPACE_NEEDLE_SHIMMER = document.getElementById('spaceNeedleShimmer');
 const TURNSTILE_MOUNT = document.getElementById('turnstileMount');
 const ACTION_BUTTON_LABELS = Array.from(document.querySelectorAll('.uiOverlay__actions .uiBtn__label'));
 const BODY = document.body;
@@ -358,6 +361,13 @@ let fieldGoalAttemptCount = 0;
 let fieldGoalEagleOverrideActive = false;
 let fieldGoalOverrideRafId = 0;
 let fieldGoalOverrideShakeTimerId = 0;
+let beastQuakeUnlocked = false;
+let beastQuakeAnimating = false;
+let beastQuakeRumbleTimerId = 0;
+let beastQuakeRevealTimerId = 0;
+let spaceNeedleShimmerTimerId = 0;
+let spaceNeedleShimmerAnimation = null;
+let spaceNeedleShimmerObserver = null;
 
 const fieldGoalMiniGameState = {
   unlocked: false,
@@ -440,6 +450,7 @@ const FIELD_GOAL_NUMBERS_SESSION_KEY = 'fgNumbers';
 const FIELD_GOAL_LAUNCHER_SHOWN_SESSION_KEY = 'fgLauncherShown';
 const FIELD_GOAL_HINT_SEEN_SESSION_KEY = 'fgDragHintSeen';
 const FIELD_GOAL_WILLIAMS_UNLOCKED_SESSION_KEY = 'fgWilliamsUnlocked';
+const BEAST_QUAKE_UNLOCKED_SESSION_KEY = 'beastQuakeUnlocked';
 const FIELD_GOAL_ACTIVE_BALL_WIDTH_RATIO = 0.125;
 const FIELD_GOAL_DRAG_RADIUS_RATIO = 0.08;
 const FIELD_GOAL_POWER_DISTANCE_RATIO = 0.26;
@@ -475,6 +486,12 @@ const FIELD_GOAL_OVERRIDE_TOTAL_MS = 2800;
 const FIELD_GOAL_OVERRIDE_COLLISION_MS = 820;
 const FIELD_GOAL_OVERRIDE_IMPACT_MS = 2050;
 const FIELD_GOAL_OVERRIDE_SHAKE_MS = 190;
+const BEAST_QUAKE_RUMBLE_MS = 2000;
+const BEAST_QUAKE_REVEAL_MS = 1900;
+const SPACE_NEEDLE_SHIMMER_MIN_DELAY_MS = 6000;
+const SPACE_NEEDLE_SHIMMER_MAX_DELAY_MS = 14000;
+const SPACE_NEEDLE_SHIMMER_DURATION_MS = 1640;
+const SPACE_NEEDLE_SHIMMER_DISABLED_RETRY_MS = 1000;
 const BOOT_LOADER_MIN_HOLD_MS = 4500;
 const BOOT_LOADER_HARD_CAP_MS = 8000;
 const BOOT_PRELOAD_IMAGE_URLS = [
@@ -1219,6 +1236,8 @@ function getDepthForLayer(layerName) {
   switch (layerName) {
     case 'mountains':
       return 0.2;
+    case 'giant-trophies':
+      return 0.28;
     case 'skyline':
       return 0.35;
     case 'left-arch':
@@ -2344,6 +2363,188 @@ function hydrateFieldGoalProgressState() {
   if (BODY) {
     BODY.classList.remove('fg-williams-spawn');
   }
+}
+
+function clearBeastQuakeTimers() {
+  if (beastQuakeRumbleTimerId) {
+    clearTimeout(beastQuakeRumbleTimerId);
+    beastQuakeRumbleTimerId = 0;
+  }
+  if (beastQuakeRevealTimerId) {
+    clearTimeout(beastQuakeRevealTimerId);
+    beastQuakeRevealTimerId = 0;
+  }
+}
+
+function setBeastQuakeUnlocked(active, persist = true) {
+  beastQuakeUnlocked = !!active;
+  if (BODY) {
+    BODY.classList.toggle('beast-quake-unlocked', beastQuakeUnlocked);
+  }
+  if (SPACE_NEEDLE_HOTSPOT) {
+    SPACE_NEEDLE_HOTSPOT.setAttribute('aria-hidden', beastQuakeUnlocked ? 'true' : 'false');
+  }
+  if (persist) {
+    try {
+      if (beastQuakeUnlocked) {
+        sessionStorage.setItem(BEAST_QUAKE_UNLOCKED_SESSION_KEY, '1');
+      } else {
+        sessionStorage.removeItem(BEAST_QUAKE_UNLOCKED_SESSION_KEY);
+      }
+    } catch {
+      // no-op
+    }
+  }
+}
+
+function hydrateBeastQuakeState() {
+  try {
+    setBeastQuakeUnlocked(sessionStorage.getItem(BEAST_QUAKE_UNLOCKED_SESSION_KEY) === '1', false);
+  } catch {
+    setBeastQuakeUnlocked(false, false);
+  }
+}
+
+function canTriggerBeastQuake() {
+  if (!BODY || !splashFinished || beastQuakeAnimating || beastQuakeUnlocked) return false;
+  if (proposalOpen || isJumbotronOpen) return false;
+  if (BODY.classList.contains('proposal-open') || BODY.classList.contains('jumbotron-open')) return false;
+  return true;
+}
+
+function runBeastQuakeReveal() {
+  if (!canTriggerBeastQuake()) return;
+
+  beastQuakeAnimating = true;
+  clearBeastQuakeTimers();
+
+  BODY.classList.add('beast-quake-active', 'beast-quake-rumbling');
+  if (BEAST_QUAKE_HEADING) {
+    BEAST_QUAKE_HEADING.setAttribute('aria-hidden', 'false');
+  }
+
+  beastQuakeRumbleTimerId = window.setTimeout(() => {
+    beastQuakeRumbleTimerId = 0;
+    if (!BODY) return;
+    BODY.classList.add('beast-quake-revealing');
+  }, BEAST_QUAKE_RUMBLE_MS);
+
+  beastQuakeRevealTimerId = window.setTimeout(() => {
+    beastQuakeRevealTimerId = 0;
+    beastQuakeAnimating = false;
+    setBeastQuakeUnlocked(true);
+    if (!BODY) return;
+    BODY.classList.remove('beast-quake-rumbling', 'beast-quake-revealing', 'beast-quake-active');
+    if (BEAST_QUAKE_HEADING) {
+      BEAST_QUAKE_HEADING.setAttribute('aria-hidden', 'true');
+    }
+  }, BEAST_QUAKE_RUMBLE_MS + BEAST_QUAKE_REVEAL_MS);
+}
+
+function clearSpaceNeedleShimmerTimers() {
+  if (spaceNeedleShimmerTimerId) {
+    clearTimeout(spaceNeedleShimmerTimerId);
+    spaceNeedleShimmerTimerId = 0;
+  }
+}
+
+function getSpaceNeedleShimmerDelayMs() {
+  return Math.floor(Math.random() * (SPACE_NEEDLE_SHIMMER_MAX_DELAY_MS - SPACE_NEEDLE_SHIMMER_MIN_DELAY_MS + 1))
+    + SPACE_NEEDLE_SHIMMER_MIN_DELAY_MS;
+}
+
+function shouldRunSpaceNeedleShimmer() {
+  if (!SPACE_NEEDLE_SHIMMER || !BODY) return false;
+  if (!splashFinished || beastQuakeUnlocked || beastQuakeAnimating) return false;
+  if (BODY.classList.contains('boot-hold') || BODY.classList.contains('splash-active')) return false;
+  if (proposalOpen || isJumbotronOpen) return false;
+  if (BODY.classList.contains('proposal-open') || BODY.classList.contains('jumbotron-open')) return false;
+  return true;
+}
+
+function stopSpaceNeedleShimmer() {
+  clearSpaceNeedleShimmerTimers();
+  if (spaceNeedleShimmerAnimation) {
+    spaceNeedleShimmerAnimation.cancel();
+    spaceNeedleShimmerAnimation = null;
+  }
+  if (SPACE_NEEDLE_SHIMMER) {
+    SPACE_NEEDLE_SHIMMER.style.opacity = '0';
+    SPACE_NEEDLE_SHIMMER.style.transform = 'translate(-50%, -50%) scale(0.92)';
+  }
+}
+
+function scheduleSpaceNeedleShimmer(delayMs = getSpaceNeedleShimmerDelayMs()) {
+  clearSpaceNeedleShimmerTimers();
+  spaceNeedleShimmerTimerId = window.setTimeout(() => {
+    spaceNeedleShimmerTimerId = 0;
+    if (!shouldRunSpaceNeedleShimmer()) {
+      scheduleSpaceNeedleShimmer(SPACE_NEEDLE_SHIMMER_DISABLED_RETRY_MS);
+      return;
+    }
+    playSpaceNeedleShimmer();
+  }, Math.max(120, delayMs));
+}
+
+function playSpaceNeedleShimmer() {
+  if (!SPACE_NEEDLE_SHIMMER) return;
+  if (!shouldRunSpaceNeedleShimmer()) {
+    scheduleSpaceNeedleShimmer(SPACE_NEEDLE_SHIMMER_DISABLED_RETRY_MS);
+    return;
+  }
+
+  if (spaceNeedleShimmerAnimation) {
+    spaceNeedleShimmerAnimation.cancel();
+    spaceNeedleShimmerAnimation = null;
+  }
+
+  spaceNeedleShimmerAnimation = SPACE_NEEDLE_SHIMMER.animate([
+    { opacity: 0, transform: 'translate(-50%, -50%) scale(0.9)', offset: 0 },
+    { opacity: 0.56, transform: 'translate(-50%, -50%) scale(0.95)', offset: 0.1 },
+    { opacity: 0.14, transform: 'translate(-50%, -50%) scale(0.97)', offset: 0.22 },
+    { opacity: 0.7, transform: 'translate(-50%, -50%) scale(0.99)', offset: 0.38 },
+    { opacity: 0.2, transform: 'translate(-50%, -50%) scale(1.01)', offset: 0.55 },
+    { opacity: 0.82, transform: 'translate(-50%, -50%) scale(1.02)', offset: 0.72 },
+    { opacity: 0.28, transform: 'translate(-50%, -50%) scale(1.03)', offset: 0.88 },
+    { opacity: 0, transform: 'translate(-50%, -50%) scale(1.04)', offset: 1 }
+  ], {
+    duration: SPACE_NEEDLE_SHIMMER_DURATION_MS,
+    easing: 'cubic-bezier(0.2, 0.75, 0.3, 1)',
+    fill: 'forwards'
+  });
+
+  spaceNeedleShimmerAnimation.onfinish = () => {
+    spaceNeedleShimmerAnimation = null;
+    if (SPACE_NEEDLE_SHIMMER) {
+      SPACE_NEEDLE_SHIMMER.style.opacity = '0';
+      SPACE_NEEDLE_SHIMMER.style.transform = 'translate(-50%, -50%) scale(0.92)';
+    }
+    scheduleSpaceNeedleShimmer();
+  };
+}
+
+function updateSpaceNeedleShimmerState() {
+  if (!shouldRunSpaceNeedleShimmer()) {
+    stopSpaceNeedleShimmer();
+    scheduleSpaceNeedleShimmer(SPACE_NEEDLE_SHIMMER_DISABLED_RETRY_MS);
+    return;
+  }
+  if (!spaceNeedleShimmerTimerId && !spaceNeedleShimmerAnimation) {
+    scheduleSpaceNeedleShimmer();
+  }
+}
+
+function initSpaceNeedleShimmerLoop() {
+  if (!SPACE_NEEDLE_SHIMMER || !BODY) return;
+
+  if (window.MutationObserver && !spaceNeedleShimmerObserver) {
+    spaceNeedleShimmerObserver = new MutationObserver(() => {
+      updateSpaceNeedleShimmerState();
+    });
+    spaceNeedleShimmerObserver.observe(BODY, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  updateSpaceNeedleShimmerState();
 }
 
 function getFieldGoalZone(frameRect, desktopAssist = false) {
@@ -6297,6 +6498,13 @@ if (FIELD_GOAL_LAUNCHER) {
   });
 }
 
+if (SPACE_NEEDLE_HOTSPOT) {
+  SPACE_NEEDLE_HOTSPOT.addEventListener('click', (event) => {
+    event.preventDefault();
+    runBeastQuakeReveal();
+  });
+}
+
 if (FIELD_GOAL_CLOSE_BTN) {
   FIELD_GOAL_CLOSE_BTN.addEventListener('click', (event) => {
     event.preventDefault();
@@ -6568,6 +6776,8 @@ async function init() {
   hydrateWelcomeHeadingState();
   hydrateTicketUnlockedState();
   hydrateFieldGoalProgressState();
+  hydrateBeastQuakeState();
+  initSpaceNeedleShimmerLoop();
   syncContextualButtonInteractivity();
   fxCelebrationPlayed = isCelebrationPlayed();
   initCelebrationFX();

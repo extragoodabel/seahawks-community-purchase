@@ -3560,23 +3560,6 @@ body.boot-hold #stadiumStage {
   }
 }
 
-.bootLoader__note {
-  position: absolute;
-  left: 50%;
-  bottom: clamp(16px, calc(28px * var(--ui-scale)), 36px);
-  transform: translateX(-50%);
-  width: min(92%, 680px);
-  color: #ffffff;
-  font-family: "Space Mono", "IBM Plex Mono", "Courier New", monospace;
-  font-size: clamp(10px, calc(12px * var(--ui-scale)), 14px);
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  line-height: 1.25;
-  text-align: center;
-  text-transform: none;
-  opacity: 0.9;
-}
-
 /* BEAST QUAKE easter egg */
 .layerWrap--giantTrophies {
   z-index: 2;
@@ -3600,9 +3583,14 @@ body.beast-quake-unlocked .layerAsset--giantTrophies {
   transform: translateY(0);
 }
 
-body.beast-quake-revealing .layerAsset--giantTrophies {
+body.beast-quake-revealing.beast-quake-towards-up .layerAsset--giantTrophies {
   opacity: 1;
   animation: beastQuakeTrophiesRise 1900ms cubic-bezier(0.16, 0.88, 0.24, 1) forwards;
+}
+
+body.beast-quake-active.beast-quake-towards-down .layerAsset--giantTrophies {
+  opacity: 1;
+  animation: beastQuakeTrophiesDrop 3640ms linear 260ms forwards;
 }
 
 .spaceNeedleHotspot {
@@ -3622,7 +3610,6 @@ body.beast-quake-revealing .layerAsset--giantTrophies {
   z-index: 58;
 }
 
-body.beast-quake-unlocked .spaceNeedleHotspot,
 body.proposal-open .spaceNeedleHotspot,
 body.jumbotron-open .spaceNeedleHotspot {
   pointer-events: none;
@@ -3666,7 +3653,6 @@ body.beast-quake-active .uiOverlay__headlineBeast {
 body.beast-quake-rumbling .stadium-scene {
   animation: beastQuakeSceneRumble 120ms steps(2, end) infinite;
 }
-
 @keyframes beastQuakeTrophiesRise {
   0% {
     transform: translateY(62%);
@@ -3676,6 +3662,21 @@ body.beast-quake-rumbling .stadium-scene {
   }
   100% {
     transform: translateY(0);
+  }
+}
+
+@keyframes beastQuakeTrophiesDrop {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  76% {
+    transform: translateY(58%);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(62%);
+    opacity: 0;
   }
 }
 
@@ -3757,7 +3758,49 @@ body.beast-quake-rumbling .stadium-scene {
 body.boot-hold .spaceNeedleShimmer,
 body.splash-active .spaceNeedleShimmer,
 body.proposal-open .spaceNeedleShimmer,
-body.jumbotron-open .spaceNeedleShimmer,
-body.beast-quake-unlocked .spaceNeedleShimmer {
+body.jumbotron-open .spaceNeedleShimmer {
+  opacity: 0 !important;
+}
+
+/* Giant trophies subtle sheen */
+.giantTrophiesSheen {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 8;
+  will-change: opacity, transform;
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0) 44%,
+    rgba(255, 255, 255, 0.42) 47%,
+    rgba(255, 255, 255, 0.78) 50%,
+    rgba(178, 214, 236, 0.62) 53%,
+    rgba(255, 255, 255, 0) 56%
+  );
+  transform: translate3d(-30%, 0, 0) skewX(-1.5deg);
+  mix-blend-mode: normal;
+  -webkit-mask-image: url("/stadium/giant-trophies.png");
+  mask-image: url("/stadium/giant-trophies.png");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+.giantTrophiesSheen--left {}
+
+.giantTrophiesSheen--center {}
+
+.giantTrophiesSheen--right {}
+
+body.boot-hold .giantTrophiesSheen,
+body.splash-active .giantTrophiesSheen,
+body.proposal-open .giantTrophiesSheen,
+body.jumbotron-open .giantTrophiesSheen,
+body.beast-quake-revealing .giantTrophiesSheen,
+body:not(.beast-quake-unlocked) .giantTrophiesSheen {
   opacity: 0 !important;
 }

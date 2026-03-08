@@ -103,6 +103,9 @@ const BOOT_LOADER_SPINNER = document.getElementById('bootLoaderSpinner');
 const SPACE_NEEDLE_HOTSPOT = document.getElementById('spaceNeedleHotspot');
 const BEAST_QUAKE_HEADING = document.getElementById('beastQuakeHeading');
 const SPACE_NEEDLE_SHIMMER = document.getElementById('spaceNeedleShimmer');
+const GIANT_TROPHIES_SHEEN = document.getElementById('giantTrophiesSheen');
+const GIANT_TROPHIES_SHEEN_LEFT = document.getElementById('giantTrophiesSheenLeft');
+const GIANT_TROPHIES_SHEEN_CENTER = document.getElementById('giantTrophiesSheenCenter');
 const TURNSTILE_MOUNT = document.getElementById('turnstileMount');
 const ACTION_BUTTON_LABELS = Array.from(document.querySelectorAll('.uiOverlay__actions .uiBtn__label'));
 const BODY = document.body;
@@ -368,6 +371,8 @@ let beastQuakeRevealTimerId = 0;
 let spaceNeedleShimmerTimerId = 0;
 let spaceNeedleShimmerAnimation = null;
 let spaceNeedleShimmerObserver = null;
+let giantTrophiesSheenTimerId = 0;
+let giantTrophiesSheenAnimations = [];
 
 const fieldGoalMiniGameState = {
   unlocked: false,
@@ -492,6 +497,10 @@ const SPACE_NEEDLE_SHIMMER_MIN_DELAY_MS = 6000;
 const SPACE_NEEDLE_SHIMMER_MAX_DELAY_MS = 14000;
 const SPACE_NEEDLE_SHIMMER_DURATION_MS = 1640;
 const SPACE_NEEDLE_SHIMMER_DISABLED_RETRY_MS = 1000;
+const GIANT_TROPHIES_SHEEN_MIN_DELAY_MS = 5000;
+const GIANT_TROPHIES_SHEEN_MAX_DELAY_MS = 11000;
+const GIANT_TROPHIES_SHEEN_DURATION_MS = 2100;
+const GIANT_TROPHIES_SHEEN_DISABLED_RETRY_MS = 1200;
 const BOOT_LOADER_MIN_HOLD_MS = 4500;
 const BOOT_LOADER_HARD_CAP_MS = 8000;
 const BOOT_PRELOAD_IMAGE_URLS = [
@@ -2382,7 +2391,7 @@ function setBeastQuakeUnlocked(active, persist = true) {
     BODY.classList.toggle('beast-quake-unlocked', beastQuakeUnlocked);
   }
   if (SPACE_NEEDLE_HOTSPOT) {
-    SPACE_NEEDLE_HOTSPOT.setAttribute('aria-hidden', beastQuakeUnlocked ? 'true' : 'false');
+    SPACE_NEEDLE_HOTSPOT.setAttribute('aria-hidden', 'false');
   }
   if (persist) {
     try {
@@ -2400,13 +2409,15 @@ function setBeastQuakeUnlocked(active, persist = true) {
 function hydrateBeastQuakeState() {
   try {
     setBeastQuakeUnlocked(sessionStorage.getItem(BEAST_QUAKE_UNLOCKED_SESSION_KEY) === '1', false);
+    updateGiantTrophiesSheenState();
   } catch {
     setBeastQuakeUnlocked(false, false);
+    updateGiantTrophiesSheenState();
   }
 }
 
 function canTriggerBeastQuake() {
-  if (!BODY || !splashFinished || beastQuakeAnimating || beastQuakeUnlocked) return false;
+  if (!BODY || !splashFinished || beastQuakeAnimating) return false;
   if (proposalOpen || isJumbotronOpen) return false;
   if (BODY.classList.contains('proposal-open') || BODY.classList.contains('jumbotron-open')) return false;
   return true;
@@ -2415,9 +2426,12 @@ function canTriggerBeastQuake() {
 function runBeastQuakeReveal() {
   if (!canTriggerBeastQuake()) return;
 
+  const shouldUnlock = !beastQuakeUnlocked;
   beastQuakeAnimating = true;
   clearBeastQuakeTimers();
 
+  BODY.classList.toggle('beast-quake-towards-up', shouldUnlock);
+  BODY.classList.toggle('beast-quake-towards-down', !shouldUnlock);
   BODY.classList.add('beast-quake-active', 'beast-quake-rumbling');
   if (BEAST_QUAKE_HEADING) {
     BEAST_QUAKE_HEADING.setAttribute('aria-hidden', 'false');
@@ -2432,15 +2446,21 @@ function runBeastQuakeReveal() {
   beastQuakeRevealTimerId = window.setTimeout(() => {
     beastQuakeRevealTimerId = 0;
     beastQuakeAnimating = false;
-    setBeastQuakeUnlocked(true);
+    setBeastQuakeUnlocked(shouldUnlock);
+    updateGiantTrophiesSheenState();
     if (!BODY) return;
-    BODY.classList.remove('beast-quake-rumbling', 'beast-quake-revealing', 'beast-quake-active');
+    BODY.classList.remove(
+      'beast-quake-rumbling',
+      'beast-quake-revealing',
+      'beast-quake-active',
+      'beast-quake-towards-up',
+      'beast-quake-towards-down'
+    );
     if (BEAST_QUAKE_HEADING) {
       BEAST_QUAKE_HEADING.setAttribute('aria-hidden', 'true');
     }
   }, BEAST_QUAKE_RUMBLE_MS + BEAST_QUAKE_REVEAL_MS);
 }
-
 function clearSpaceNeedleShimmerTimers() {
   if (spaceNeedleShimmerTimerId) {
     clearTimeout(spaceNeedleShimmerTimerId);
@@ -2455,7 +2475,7 @@ function getSpaceNeedleShimmerDelayMs() {
 
 function shouldRunSpaceNeedleShimmer() {
   if (!SPACE_NEEDLE_SHIMMER || !BODY) return false;
-  if (!splashFinished || beastQuakeUnlocked || beastQuakeAnimating) return false;
+  if (!splashFinished || beastQuakeAnimating) return false;
   if (BODY.classList.contains('boot-hold') || BODY.classList.contains('splash-active')) return false;
   if (proposalOpen || isJumbotronOpen) return false;
   if (BODY.classList.contains('proposal-open') || BODY.classList.contains('jumbotron-open')) return false;
@@ -2540,11 +2560,136 @@ function initSpaceNeedleShimmerLoop() {
   if (window.MutationObserver && !spaceNeedleShimmerObserver) {
     spaceNeedleShimmerObserver = new MutationObserver(() => {
       updateSpaceNeedleShimmerState();
+      updateGiantTrophiesSheenState();
     });
     spaceNeedleShimmerObserver.observe(BODY, { attributes: true, attributeFilter: ['class'] });
   }
 
   updateSpaceNeedleShimmerState();
+  updateGiantTrophiesSheenState();
+}
+
+function clearGiantTrophiesSheenTimer() {
+  if (giantTrophiesSheenTimerId) {
+    clearTimeout(giantTrophiesSheenTimerId);
+    giantTrophiesSheenTimerId = 0;
+  }
+}
+
+function getGiantTrophiesSheenDelayMs() {
+  return Math.floor(Math.random() * (GIANT_TROPHIES_SHEEN_MAX_DELAY_MS - GIANT_TROPHIES_SHEEN_MIN_DELAY_MS + 1))
+    + GIANT_TROPHIES_SHEEN_MIN_DELAY_MS;
+}
+
+function getGiantTrophiesSheenTargets() {
+  return [GIANT_TROPHIES_SHEEN_LEFT, GIANT_TROPHIES_SHEEN_CENTER, GIANT_TROPHIES_SHEEN].filter(Boolean);
+}
+
+function shouldRunGiantTrophiesSheen() {
+  if (!BODY || !getGiantTrophiesSheenTargets().length) return false;
+  if (!beastQuakeUnlocked || beastQuakeAnimating || !splashFinished) return false;
+  if (BODY.classList.contains('boot-hold') || BODY.classList.contains('splash-active')) return false;
+  if (proposalOpen || isJumbotronOpen) return false;
+  if (BODY.classList.contains('proposal-open') || BODY.classList.contains('jumbotron-open')) return false;
+  return true;
+}
+
+function getGiantTrophiesSheenXRange(target) {
+  if (target?.classList.contains('giantTrophiesSheen--left')) {
+    return { start: -50, peakA: -38, peakB: -26, peakC: -14, end: -4 };
+  }
+  if (target?.classList.contains('giantTrophiesSheen--center')) {
+    return { start: -22, peakA: -10, peakB: 0, peakC: 10, end: 20 };
+  }
+  return { start: 6, peakA: 18, peakB: 30, peakC: 42, end: 54 };
+}
+
+function resetGiantTrophiesSheenTargets() {
+  const targets = getGiantTrophiesSheenTargets();
+  targets.forEach((target) => {
+    const range = getGiantTrophiesSheenXRange(target);
+    target.style.opacity = '0';
+    target.style.transform = `translate3d(${range.start}%, 0, 0) skewX(-1.5deg)`;
+  });
+}
+function stopGiantTrophiesSheen() {
+  clearGiantTrophiesSheenTimer();
+  if (giantTrophiesSheenAnimations.length) {
+    giantTrophiesSheenAnimations.forEach((animation) => animation.cancel());
+    giantTrophiesSheenAnimations = [];
+  }
+  resetGiantTrophiesSheenTargets();
+}
+
+function scheduleGiantTrophiesSheen(delayMs = getGiantTrophiesSheenDelayMs()) {
+  clearGiantTrophiesSheenTimer();
+  giantTrophiesSheenTimerId = window.setTimeout(() => {
+    giantTrophiesSheenTimerId = 0;
+    if (!shouldRunGiantTrophiesSheen()) {
+      scheduleGiantTrophiesSheen(GIANT_TROPHIES_SHEEN_DISABLED_RETRY_MS);
+      return;
+    }
+    playGiantTrophiesSheen();
+  }, Math.max(180, delayMs));
+}
+
+function playGiantTrophiesSheen() {
+  const targets = getGiantTrophiesSheenTargets();
+  if (!targets.length) return;
+  if (!shouldRunGiantTrophiesSheen()) {
+    scheduleGiantTrophiesSheen(GIANT_TROPHIES_SHEEN_DISABLED_RETRY_MS);
+    return;
+  }
+
+  if (giantTrophiesSheenAnimations.length) {
+    giantTrophiesSheenAnimations.forEach((animation) => animation.cancel());
+    giantTrophiesSheenAnimations = [];
+  }
+
+  let remainingAnimations = targets.length;
+
+  giantTrophiesSheenAnimations = targets.map((target) => {
+    const range = getGiantTrophiesSheenXRange(target);
+    const keyframes = [
+      { opacity: 0, transform: `translate3d(${range.start}%, 0, 0) skewX(-1.5deg)`, offset: 0 },
+      { opacity: 0.46, transform: `translate3d(${range.peakA}%, 0, 0) skewX(-1.5deg)`, offset: 0.24 },
+      { opacity: 0.78, transform: `translate3d(${range.peakB}%, 0, 0) skewX(-1.5deg)`, offset: 0.54 },
+      { opacity: 0.42, transform: `translate3d(${range.peakC}%, 0, 0) skewX(-1.5deg)`, offset: 0.78 },
+      { opacity: 0, transform: `translate3d(${range.end}%, 0, 0) skewX(-1.5deg)`, offset: 1 }
+    ];
+
+    const animation = target.animate(keyframes, {
+      duration: GIANT_TROPHIES_SHEEN_DURATION_MS,
+      easing: 'cubic-bezier(0.2, 0.72, 0.24, 1)',
+      fill: 'forwards',
+      delay: 0
+    });
+
+    animation.onfinish = () => {
+      remainingAnimations -= 1;
+      if (remainingAnimations > 0) return;
+      giantTrophiesSheenAnimations = [];
+      resetGiantTrophiesSheenTargets();
+      scheduleGiantTrophiesSheen();
+    };
+
+    return animation;
+  });
+}
+function updateGiantTrophiesSheenState() {
+  if (!shouldRunGiantTrophiesSheen()) {
+    stopGiantTrophiesSheen();
+    scheduleGiantTrophiesSheen(GIANT_TROPHIES_SHEEN_DISABLED_RETRY_MS);
+    return;
+  }
+  if (!giantTrophiesSheenTimerId && giantTrophiesSheenAnimations.length === 0) {
+    scheduleGiantTrophiesSheen();
+  }
+}
+
+function initGiantTrophiesSheenLoop() {
+  if (!BODY || !getGiantTrophiesSheenTargets().length) return;
+  updateGiantTrophiesSheenState();
 }
 
 function getFieldGoalZone(frameRect, desktopAssist = false) {
@@ -6778,6 +6923,7 @@ async function init() {
   hydrateFieldGoalProgressState();
   hydrateBeastQuakeState();
   initSpaceNeedleShimmerLoop();
+  initGiantTrophiesSheenLoop();
   syncContextualButtonInteractivity();
   fxCelebrationPlayed = isCelebrationPlayed();
   initCelebrationFX();
